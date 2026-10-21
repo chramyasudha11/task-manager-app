@@ -8,10 +8,15 @@ import os
 auth_bp = Blueprint("auth", __name__)
 
 DB_NAME = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
-
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
 
 def get_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
