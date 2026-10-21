@@ -6,3 +6,4 @@ users.db
 venv/
 .venv/
 "@ | Add-Content .gitignore
+setup_test_tasks.py
