@@ -529,6 +529,7 @@ def api_switch_role():
         if user:
             session["user_id"] = user["id"]
             return jsonify({
+                "success": True,
                 "message": f"Switched to {user['name']} ({user['role']})",
                 "user": dict(user)
             })
