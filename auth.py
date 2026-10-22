@@ -1,3 +1,7 @@
+ feature/dashboard-reports
+
+
+ main
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -7,10 +11,22 @@ import os
 auth_bp = Blueprint("auth", __name__)
 
 DB_NAME = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
+ feature/dashboard-reports
 
 
 def get_db():
     conn = sqlite3.connect(DB_NAME)
+
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+def get_db():
+    conn = sqlite3.connect(DB_NAME, factory=ClosingConnection)
+ main
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -192,4 +208,8 @@ def manager_dashboard():
 @auth_bp.route("/api/employee/dashboard", methods=["GET"])
 @roles_required("ADMIN", "MANAGER", "EMPLOYEE")
 def employee_dashboard():
+ feature/dashboard-reports
     return jsonify({"message": "Authenticated access granted"})
+
+    return jsonify({"message": "Authenticated access granted"})
+ main
