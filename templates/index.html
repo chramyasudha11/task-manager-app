@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Taskspace | Task Manager</title>
+  <title>TASKSPACE | Task Manager</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <script src="{{ url_for('static', filename='js/api.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
@@ -11,9 +11,9 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Taskspace home"><span class="brand-icon">t.</span><span><b>taskspace</b><small>YOUR PERSONAL WORKSPACE</small></span></a>
+      <a class="brand" href="#" aria-label="TASKSPACE home"><span class="brand-icon">T</span><span><b>TASKSPACE</b><small>YOUR PERSONAL WORKSPACE</small></span></a>
       <div class="top-actions">
-        <a class="btn btn-light" href="/dashboard" style="text-decoration:none;font-weight:700;display:inline-flex;align-items:center;gap:6px;color:var(--olive-dark);">📊 Dashboard ⭐</a>
+        <a class="btn btn-light" href="/dashboard" style="text-decoration:none;font-weight:700;display:inline-flex;align-items:center;gap:6px;color:var(--olive-dark);">📊 Dashboard</a>
         <button class="btn btn-light theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
         <button class="btn btn-light" id="export-btn" type="button">↓ Export CSV</button>
         <button class="btn btn-primary" id="new-task-btn" type="button">+ New task</button>
@@ -31,7 +31,7 @@
       </nav>
       <p class="sidebar-label" style="margin-top: 16px;">MANAGEMENT</p>
       <nav class="workspace-nav">
-        <a class="workspace-item" href="/dashboard" style="text-decoration:none;"><span>📊</span><span>Admin &amp; Manager</span><b style="background:var(--olive);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">⭐</b></a>
+        <a class="workspace-item" href="/dashboard" style="text-decoration:none;"><span>📊</span><span>Admin &amp; Manager</span></a>
       </nav>
       <p class="sidebar-label categories-label">CATEGORIES</p>
       <nav id="sidebar-categories" class="sidebar-categories"></nav>
@@ -61,7 +61,7 @@
         <div class="bulk-bar" id="bulk-bar" hidden><label><input id="select-all" type="checkbox"> Select visible</label><span><b id="selected-count">0</b> selected</span><button class="link-btn" id="bulk-complete">Complete selected</button><button class="link-btn danger" id="bulk-delete">Delete selected</button></div>
         <div id="task-list" class="task-list" aria-live="polite"></div>
       </section>
-      <footer><span>Made for a more focused day.</span><span>Task Manager · Member 5 UI &amp; Member 6 Dashboard ⭐</span></footer>
+      <footer><span>Made for a more focused day.</span><span>Task Manager · TASKSPACE Dashboard</span></footer>
     </main>
   </div>
 
