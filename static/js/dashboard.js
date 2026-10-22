@@ -266,13 +266,13 @@ function renderTrendChart(trend) {
         {
           label: "Total Created Tasks",
           data: trend.created,
-          borderColor: "#3b82f6",
+          borderColor: "#4f64e8",
           backgroundColor: "transparent",
           borderDash: [4, 4],
           tension: 0.35,
           borderWidth: 2,
           pointBackgroundColor: "#ffffff",
-          pointBorderColor: "#3b82f6",
+          pointBorderColor: "#4f64e8",
           pointBorderWidth: 2,
           pointRadius: 3
         }
@@ -401,7 +401,7 @@ function renderProjectChart(projects) {
       datasets: [{
         label: "Tasks",
         data: projects.data,
-        backgroundColor: "#2563eb",
+        backgroundColor: "#4f64e8",
         borderRadius: 4,
         barThickness: 16
       }]
@@ -442,7 +442,7 @@ function renderTeamChart(teams) {
       datasets: [{
         label: "Assigned Tasks",
         data: teams.data,
-        backgroundColor: ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#64748b"],
+        backgroundColor: ["#4f64e8", "#1b9b70", "#7166dd", "#a66b14", "#ec4899", "#64748b"],
         borderRadius: 6,
         barThickness: 28
       }]
