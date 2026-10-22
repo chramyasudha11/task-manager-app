@@ -36,7 +36,9 @@ def get_kpi_metrics(conn):
 
     total_employees = 48
     if u_table:
-        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM users WHERE email LIKE '%@taskspace.com'").fetchone()[0]
+        if count == 0:
+            count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if count > 0:
             total_employees = count
 
@@ -247,8 +249,10 @@ def get_employees_breakdown(conn):
                SUM(CASE WHEN t.status != 'Completed' AND t.due_date IS NOT NULL AND t.due_date < '{today}' THEN 1 ELSE 0 END) as overdue
         FROM users u
         LEFT JOIN tasks t ON t.assigned_to = u.id
+        WHERE u.email LIKE '%@taskspace.com' OR (SELECT COUNT(*) FROM users WHERE email LIKE '%@taskspace.com') = 0
         GROUP BY u.id
         ORDER BY assigned DESC, overdue DESC, u.name ASC
+        LIMIT 48
     """).fetchall()
 
     results = []

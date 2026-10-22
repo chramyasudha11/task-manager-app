@@ -38,25 +38,25 @@
       <p class="sidebar-note">Small steps. Meaningful progress.</p>
     </aside><main>
       <section class="intro">
-        <div><p class="eyebrow" id="view-eyebrow">ΓÇö YOUR DAY, YOUR PACE</p><h1 id="view-title">All tasks<span>.</span></h1><p class="subtitle" id="view-subtitle">A little progress every day adds up to big results.</p></div>
-        <div class="date-card"><span>Γûª</span><div><small>TODAY</small><b id="today-date">Today</b></div></div>
+        <div><p class="eyebrow" id="view-eyebrow">— YOUR DAY, YOUR PACE</p><h1 id="view-title">All tasks<span>.</span></h1><p class="subtitle" id="view-subtitle">A little progress every day adds up to big results.</p></div>
+        <div class="date-card"><span>■</span><div><small>TODAY</small><b id="today-date">Today</b></div></div>
       </section>
 
       <section class="stats" aria-label="Task summary">
-        <article class="stat-card"><div>Total tasks <span class="stat-icon olive">Γûª</span></div><strong id="total-count">0</strong><small>Tasks in your workspace</small></article>
-        <article class="stat-card"><div>In progress <span class="stat-icon sand">Γù╖</span></div><strong id="progress-count">0</strong><small>Still on your list</small></article>
-        <article class="stat-card"><div>Completed <span class="stat-icon green">Γ£ô</span></div><strong id="completed-count">0</strong><small>Things you've finished</small></article>
+        <article class="stat-card"><div>Total tasks <span class="stat-icon olive">■</span></div><strong id="total-count">0</strong><small>Tasks in your workspace</small></article>
+        <article class="stat-card"><div>In progress <span class="stat-icon sand">◷</span></div><strong id="progress-count">0</strong><small>Still on your list</small></article>
+        <article class="stat-card"><div>Completed <span class="stat-icon green">✓</span></div><strong id="completed-count">0</strong><small>Things you've finished</small></article>
         <article class="stat-card"><div>Overdue <span class="stat-icon red">!</span></div><strong id="overdue-count">0</strong><small>Need your attention</small></article>
       </section>
 
       <section class="task-panel">
         <div class="panel-title"><div><h2>Your task list</h2><p>Organise the details. Focus on what matters.</p></div><span class="count-pill"><b id="visible-count">0</b> tasks</span></div>
         <div class="filters">
-          <label class="search"><span>Γîò</span><input id="search" type="search" placeholder="Search tasks, notes, labels..." aria-label="Search tasks"><kbd>/</kbd></label>
+          <label class="search"><span>🔍</span><input id="search" type="search" placeholder="Search tasks, notes, labels..." aria-label="Search tasks"><kbd>/</kbd></label>
           <select id="category-filter" aria-label="Filter category"><option value="">All categories</option></select>
           <select id="priority-filter" aria-label="Filter priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select>
           <select id="status-filter" aria-label="Filter status"><option value="">All statuses</option><option value="pending">In progress</option><option value="completed">Completed</option><option value="overdue">Overdue</option></select>
-          <select id="sort-filter" aria-label="Sort tasks"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title AΓÇôZ</option></select>
+          <select id="sort-filter" aria-label="Sort tasks"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title A–Z</option></select>
         </div>
         <div class="bulk-bar" id="bulk-bar" hidden><label><input id="select-all" type="checkbox"> Select visible</label><span><b id="selected-count">0</b> selected</span><button class="link-btn" id="bulk-complete">Complete selected</button><button class="link-btn danger" id="bulk-delete">Delete selected</button></div>
         <div id="task-list" class="task-list" aria-live="polite"></div>
@@ -67,7 +67,7 @@
 
   <div class="modal-backdrop" id="task-modal" hidden>
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-head"><div><p class="eyebrow">TASK DETAILS</p><h2 id="modal-title">Create a new task</h2></div><button id="close-modal" class="close-btn" type="button" aria-label="Close">├ù</button></div>
+      <div class="modal-head"><div><p class="eyebrow">TASK DETAILS</p><h2 id="modal-title">Create a new task</h2></div><button id="close-modal" class="close-btn" type="button" aria-label="Close">✕</button></div>
       <form id="task-form">
         <label class="field">Task title *<input name="title" required maxlength="180" placeholder="What needs to get done?"></label>
         <label class="field">Description<textarea name="description" rows="2" placeholder="Add a short description..."></textarea></label>

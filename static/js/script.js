@@ -349,7 +349,7 @@ function renderTask(t) {
         data-id="${esc(t.id)}"
         title="Toggle completion"
         aria-label="Toggle completion"
-      >${t.completed ? "G£ô" : ""}</button>
+      >${t.completed ? "âœ“" : ""}</button>
 
       <div class="task-body">
         <div class="task-title-row">
@@ -371,7 +371,7 @@ function renderTask(t) {
             ${dateText(t.due_date)}
           </span>
 
-          ${t.completed ? "<span>G£ô Completed</span>" : ""}
+          ${t.completed ? "<span>âœ“ Completed</span>" : ""}
         </div>
 
         ${labelHtml}
@@ -433,10 +433,10 @@ function updateViewHeading() {
 
   $("view-eyebrow").textContent =
     filters.category
-      ? "GÇö CATEGORY VIEW"
+      ? "â€” CATEGORY VIEW"
       : filters.view === "all"
-        ? "GÇö YOUR DAY, YOUR PACE"
-        : "GÇö WORKSPACE VIEW";
+        ? "â€” YOUR DAY, YOUR PACE"
+        : "â€” WORKSPACE VIEW";
 
   const panelTitle = filters.category
     ? `${filters.category} tasks`
@@ -468,7 +468,7 @@ function render() {
   const emptyText = tasks.length
     ? "Try changing your search or filters."
     : filters.view === "overdue"
-      ? "Great GÇö you have no overdue tasks."
+      ? "Great â€” you have no overdue tasks."
       : filters.view === "completed"
         ? "Complete a task and it will appear here."
         : filters.view === "today"
@@ -481,7 +481,7 @@ function render() {
     ? list.map(renderTask).join("")
     : `
       <div class="empty-state">
-        <div class="empty-icon">G£¦</div>
+        <div class="empty-icon">ðŸ“‹</div>
         <h3>${emptyTitle}</h3>
         <p>${emptyText}</p>
         <button class="btn btn-primary" data-action="new">
@@ -768,3 +768,164 @@ async function bulkDelete() {
     toast(`Could not delete selected tasks: ${error.message}`, true);
   }
 }
+
+// =========================================================================
+// EVENT LISTENERS & INITIALIZATION
+// =========================================================================
+
+function setupEventListeners() {
+  // 1. New Task Modal Open & Close
+  $("new-task-btn")?.addEventListener("click", () => openModal());
+  $("close-modal")?.addEventListener("click", closeModal);
+  $("cancel-modal")?.addEventListener("click", closeModal);
+  $("task-modal")?.addEventListener("click", (e) => {
+    if (e.target.id === "task-modal") closeModal();
+  });
+
+  // 2. Task Form Submit
+  $("task-form")?.addEventListener("submit", saveTask);
+
+  // 3. Search Filter & Shortcut
+  $("search")?.addEventListener("input", (e) => {
+    filters.search = e.target.value;
+    render();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== $("search") && !document.querySelector("input:focus, textarea:focus")) {
+      e.preventDefault();
+      $("search")?.focus();
+    }
+    if (e.key === "Escape" && !$("task-modal")?.hidden) {
+      closeModal();
+    }
+  });
+
+  // 4. Dropdown Filters
+  $("category-filter")?.addEventListener("change", (e) => {
+    filters.category = e.target.value;
+    render();
+  });
+  $("priority-filter")?.addEventListener("change", (e) => {
+    filters.priority = e.target.value;
+    render();
+  });
+  $("status-filter")?.addEventListener("change", (e) => {
+    filters.status = e.target.value;
+    render();
+  });
+  $("sort-filter")?.addEventListener("change", (e) => {
+    filters.sort = e.target.value;
+    render();
+  });
+
+  // 5. Workspace Nav (All tasks, Due today, Upcoming, Overdue, Completed)
+  $("workspace-nav")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-view]");
+    if (!btn) return;
+    filters.view = btn.dataset.view;
+    filters.category = "";
+    render();
+  });
+
+  // 6. Sidebar Categories
+  $("sidebar-categories")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-category]");
+    if (!btn) return;
+    const cat = btn.dataset.category;
+    filters.category = filters.category === cat ? "" : cat;
+    render();
+  });
+
+  // 7. Task List Actions (Complete, Edit, Delete, Select)
+  $("task-list")?.addEventListener("click", (e) => {
+    const actionBtn = e.target.closest("[data-action]");
+    if (actionBtn) {
+      const action = actionBtn.dataset.action;
+      const id = actionBtn.dataset.id;
+      if (action === "complete") {
+        completeTask(id);
+      } else if (action === "edit") {
+        const t = tasks.find(item => String(item.id) === String(id));
+        if (t) openModal(t);
+      } else if (action === "delete") {
+        deleteTask(id);
+      }
+      return;
+    }
+
+    const checkEl = e.target.closest(".task-select");
+    if (checkEl) {
+      const id = checkEl.dataset.select;
+      if (checkEl.checked) {
+        selected.add(id);
+      } else {
+        selected.delete(id);
+      }
+      $("selected-count").textContent = selected.size;
+      $("bulk-bar").hidden = selected.size === 0;
+      const list = visibleTasks();
+      $("select-all").checked = list.length > 0 && list.every(t => selected.has(t.id));
+    }
+  });
+
+  // 8. Select All Checkbox
+  $("select-all")?.addEventListener("change", (e) => {
+    const list = visibleTasks();
+    if (e.target.checked) {
+      list.forEach(t => selected.add(t.id));
+    } else {
+      list.forEach(t => selected.delete(t.id));
+    }
+    $("selected-count").textContent = selected.size;
+    $("bulk-bar").hidden = selected.size === 0;
+    render();
+  });
+
+  // 9. Bulk Complete & Bulk Delete
+  $("bulk-complete")?.addEventListener("click", bulkComplete);
+  $("bulk-delete")?.addEventListener("click", bulkDelete);
+
+  // 10. Export CSV
+  $("export-btn")?.addEventListener("click", exportTasksCSV);
+
+  // 11. Format Today's Date
+  const todayDateEl = $("today-date");
+  if (todayDateEl) {
+    todayDateEl.textContent = new Date().toLocaleDateString("en-US", {
+      weekday: "short",
+      day: "numeric",
+      month: "short"
+    });
+  }
+}
+
+// Global Export function
+function exportTasksCSV() {
+  if (!tasks.length) return toast("No tasks to export.", true);
+  const headers = ["ID", "Title", "Description", "Category", "Priority", "Status", "Due Date", "Created At"];
+  const rows = tasks.map(t => [
+    `"${t.id}"`,
+    `"${(t.title || "").replace(/"/g, '""')}"`,
+    `"${(t.description || "").replace(/"/g, '""')}"`,
+    `"${t.category}"`,
+    `"${t.priority}"`,
+    `"${t.completed ? "Completed" : "Pending"}"`,
+    `"${t.due_date || ""}"`,
+    `"${t.created_at || ""}"`
+  ]);
+  const csv = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  const link = document.createElement("a");
+  link.href = encodeURI(csv);
+  link.download = `taskspace_tasks_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  toast("Tasks exported to CSV.");
+}
+
+// Initial Boot on DOM Ready
+document.addEventListener("DOMContentLoaded", async () => {
+  initCategoryOptions();
+  setupEventListeners();
+  await loadTasks();
+});
