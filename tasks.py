@@ -1,7 +1,13 @@
 """Member 2: session-authenticated task REST API using Member 1's users.db.
 
+ feature/dashboard-reports
+Role visibility is aligned with Member 2's Task API permission agreement:
+ADMIN and MANAGER see all tasks; EMPLOYEE sees assigned tasks and unassigned
+tasks they created. MANAGER and ADMIN can assign tasks.
+
 Roles: ADMIN/MANAGER manage all tasks and assignments; EMPLOYEE manages
 assigned tasks, or self-created tasks that have not been assigned elsewhere.
+ main
 """
 
 from datetime import date, datetime, timezone
@@ -15,6 +21,9 @@ from auth import get_db, login_required
 tasks_bp = Blueprint("tasks", __name__)
 
 VALID_STATUSES = {"pending", "in_progress", "completed"}
+ feature/dashboard-reports
+STATUS_STORAGE = {"pending": "Pending", "in_progress": "In Progress", "completed": "Completed"}
+ main
 VALID_PRIORITIES = {"Low", "Medium", "High"}
 EDITABLE_FIELDS = {"title", "description", "status", "priority", "category", "due_date"}
 MANAGEMENT_ROLES = {"ADMIN", "MANAGER"}
@@ -48,8 +57,15 @@ def init_tasks_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
+ feature/dashboard-reports
+                status TEXT NOT NULL DEFAULT 'Pending'
+                    CHECK (status IN ('Pending', 'In Progress', 'Completed')),
+                priority TEXT NOT NULL DEFAULT 'Medium'
+                    CHECK (priority IN ('Low', 'Medium', 'High')),
+
                 status TEXT NOT NULL DEFAULT 'pending',
                 priority TEXT NOT NULL DEFAULT 'Medium',
+ main
                 category TEXT NOT NULL DEFAULT 'Personal',
                 due_date TEXT,
                 created_by INTEGER NOT NULL,
@@ -65,7 +81,11 @@ def init_tasks_db():
         old_columns = _columns(conn)
         migrations = {
             "description": "TEXT NOT NULL DEFAULT ''",
+ feature/dashboard-reports
+            "status": "TEXT NOT NULL DEFAULT 'Pending'",
+
             "status": "TEXT NOT NULL DEFAULT 'pending'",
+ main
             "priority": "TEXT NOT NULL DEFAULT 'Medium'",
             "category": "TEXT NOT NULL DEFAULT 'Personal'",
             "due_date": "TEXT",
@@ -80,7 +100,11 @@ def init_tasks_db():
 
         if "is_completed" in old_columns and "status" not in old_columns:
             conn.execute(
+ feature/dashboard-reports
+                "UPDATE tasks SET status = 'Completed' WHERE is_completed = 1"
+
                 "UPDATE tasks SET status = 'completed' WHERE is_completed = 1"
+ main
             )
 
         if "user_id" in old_columns:
@@ -91,6 +115,22 @@ def init_tasks_db():
             """)
 
         # Normalize older JWT/SQLAlchemy conventions if an old tasks table was reused.
+ feature/dashboard-reports
+        # Normalize status spellings so API filters and dashboard counts agree.
+        conn.execute("""UPDATE tasks SET status = 'Pending'
+                     WHERE LOWER(TRIM(status)) IN ('todo', 'pending')""")
+        conn.execute("""UPDATE tasks SET status = 'In Progress'
+                     WHERE LOWER(TRIM(status)) IN
+                           ('in progress', 'in-progress', 'in_progress')""")
+        conn.execute("""UPDATE tasks SET status = 'Completed'
+                     WHERE LOWER(TRIM(status)) IN ('done', 'completed')""")
+        conn.execute("""UPDATE tasks SET priority = 'Low'
+                     WHERE LOWER(TRIM(priority)) = 'low'""")
+        conn.execute("""UPDATE tasks SET priority = 'Medium'
+                     WHERE LOWER(TRIM(priority)) = 'medium'""")
+        conn.execute("""UPDATE tasks SET priority = 'High'
+                     WHERE LOWER(TRIM(priority)) = 'high'""")
+
         conn.execute("""UPDATE tasks SET status = 'pending'
                      WHERE LOWER(status) = 'todo'""")
         conn.execute("""UPDATE tasks SET status = 'completed'
@@ -101,6 +141,7 @@ def init_tasks_db():
                      WHERE LOWER(priority) = 'medium'""")
         conn.execute("""UPDATE tasks SET priority = 'High'
                      WHERE LOWER(priority) = 'high'""")
+ main
 
         timestamp = _now()
         conn.execute("""
@@ -165,7 +206,11 @@ def _validate_edit(data, *, creating=False):
                 status = "completed"
             if status not in VALID_STATUSES:
                 return None, _error("status must be pending, in_progress, or completed")
+ feature/dashboard-reports
+            clean[key] = STATUS_STORAGE[status]
+
             clean[key] = status
+ main
         elif key == "due_date":
             if value is None or value == "":
                 clean[key] = None
@@ -191,6 +236,17 @@ def _can_manage(actor):
 
 
 def _can_access(task, actor):
+ feature/dashboard-reports
+    role = str(actor["role"]).upper()
+    if role in ("ADMIN", "MANAGER"):
+        return True
+    if role == "EMPLOYEE":
+        return (
+            task["assigned_to"] == actor["id"]
+            or (task["assigned_to"] is None and task["created_by"] == actor["id"])
+        )
+    return False
+
     if _can_manage(actor):
         return True
     # An assigned task belongs to its assignee; an unassigned task to its creator.
@@ -198,6 +254,7 @@ def _can_access(task, actor):
         task["assigned_to"] == actor["id"]
         or (task["assigned_to"] is None and task["created_by"] == actor["id"])
     )
+ main
 
 
 def _task(conn, task_id):
@@ -219,7 +276,11 @@ def _public(task):
         "due_date", "created_by", "assigned_to", "created_at", "updated_at"
     )
     result = {field: task[field] for field in fields}
+ feature/dashboard-reports
+    result["is_completed"] = str(result["status"]).strip().lower() == "completed"
+
     result["is_completed"] = result["status"] == "completed"
+ main
     return result
 
 
@@ -239,7 +300,11 @@ def _sync_legacy_completed(conn, task_id, status):
     if "is_completed" in _columns(conn):
         conn.execute(
             "UPDATE tasks SET is_completed = ? WHERE id = ?",
+ feature/dashboard-reports
+            (int(str(status).strip().lower() == "completed"), task_id)
+
             (int(status == "completed"), task_id)
+ main
         )
 
 
@@ -258,15 +323,31 @@ def create_task():
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
+ feature/dashboard-reports
+        if actor["role"] not in {"ADMIN", "MANAGER", "EMPLOYEE"}:
+            return _error("Unsupported user role", 403)
         if "assigned_to" in data and not _can_manage(actor):
             return _error("Only a manager or admin can assign tasks", 403)
         assigned_to = data.get("assigned_to")
+        # A task created by an employee is assigned to that employee so it remains
+        # visible under the shared rule that employees see tasks assigned to them.
+        if actor["role"] == "EMPLOYEE" and "assigned_to" not in data:
+            assigned_to = actor["id"]
+
+        if "assigned_to" in data and not _can_manage(actor):
+            return _error("Only a manager or admin can assign tasks", 403)
+        assigned_to = data.get("assigned_to")
+ main
         error = _assignee_error(conn, assigned_to)
         if error:
             return error
 
         cleaned.setdefault("description", "")
+ feature/dashboard-reports
+        cleaned.setdefault("status", "Pending")
+
         cleaned.setdefault("status", "pending")
+ main
         cleaned.setdefault("priority", "Medium")
         cleaned.setdefault("category", "Personal")
         cleaned.setdefault("due_date", None)
@@ -280,7 +361,11 @@ def create_task():
             # Keep older apps querying tasks.user_id compatible.
             cleaned["user_id"] = actor["id"]
         if "is_completed" in _columns(conn):
+ feature/dashboard-reports
+            cleaned["is_completed"] = int(str(cleaned["status"]).strip().lower() == "completed")
+
             cleaned["is_completed"] = int(cleaned["status"] == "completed")
+ main
         names = list(cleaned)
         placeholders = ", ".join("?" for _ in names)
         columns = ", ".join(names)  # names are all validated internal constants
@@ -324,9 +409,19 @@ def list_tasks():
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
+ feature/dashboard-reports
+        role = str(actor["role"]).upper()
+        if role == "EMPLOYEE":
+            filters.append("(assigned_to = ? OR (assigned_to IS NULL AND created_by = ?))")
+            params.extend([actor["id"], actor["id"]])
+        elif role not in ("ADMIN", "MANAGER"):
+            return _error("Unsupported user role", 403)
+
+
         if not _can_manage(actor):
             filters.append("(assigned_to = ? OR (assigned_to IS NULL AND created_by = ?))")
             params.extend([actor["id"], actor["id"]])
+ main
         sql = "SELECT * FROM tasks"
         if filters:
             sql += " WHERE " + " AND ".join(filters)
@@ -439,4 +534,8 @@ def assign_task(task_id):
             "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
             (data["assigned_to"], _now(), task_id)
         )
+ feature/dashboard-reports
         return jsonify(_public(_task(conn, task_id)))
+
+        return jsonify(_public(_task(conn, task_id)))
+main

@@ -1,7 +1,14 @@
 __pycache__/
 *.py[cod]
+feature/dashboard-reports
+users.db
+.env
+venv/
+.venv/
+setup_test_tasks.py
 *.db
 .env
 .venv/
 venv/
 auth_backup.py
+ main
