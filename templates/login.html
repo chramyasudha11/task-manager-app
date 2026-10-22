@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | TASKSPACE</title>
+  
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --brand: #2563eb;
+      --brand-dark: #1d4ed8;
+      --brand-light: #eff6ff;
+      --success: #10b981;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --danger-text: #991b1b;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .auth-page {
+      display: grid;
+      min-height: 100vh;
+      grid-template-columns: minmax(340px, 0.95fr) minmax(420px, 1.05fr);
+    }
+
+    /* Left Brand Panel */
+    .auth-brand-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 100vh;
+      padding: 48px clamp(32px, 6vw, 84px);
+      background:
+        radial-gradient(circle at 85% 72%, rgba(59, 130, 246, 0.4), transparent 30%),
+        radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.45), transparent 32%),
+        linear-gradient(145deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%);
+      color: #ffffff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #ffffff;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-lockup strong {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-copy {
+      max-width: 480px;
+      margin: auto 0;
+      padding: 60px 0;
+    }
+
+    .eyebrow {
+      display: block;
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      margin-bottom: 12px;
+    }
+
+    .brand-copy h1 {
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -1px;
+      margin-bottom: 18px;
+    }
+
+    .brand-copy p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .brand-footer {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    /* Right Form Side */
+    .auth-form-side {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      background: var(--surface);
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+    }
+
+    .auth-card h2 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      margin-bottom: 8px;
+    }
+
+    .auth-subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* Role selector pill group */
+    .login-role-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      background: #f1f5f9;
+      padding: 4px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+    }
+
+    .login-role-button {
+      padding: 8px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .login-role-button.active {
+      background: #ffffff;
+      color: var(--brand);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      font-weight: 700;
+    }
+
+    /* Demo Quick-Login Pills */
+    .quick-demos-wrap {
+      margin-bottom: 20px;
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .quick-demos-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .demo-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .demo-pill-btn {
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: var(--text);
+    }
+
+    .demo-pill-btn:hover {
+      border-color: var(--brand);
+      color: var(--brand);
+      background: var(--brand-light);
+    }
+
+    /* Form Fields */
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .form-field label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+    }
+
+    .form-field input {
+      width: 100%;
+      height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .form-field input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .password-wrap {
+      position: relative;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .form-message {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .form-message.error {
+      display: block;
+      background: var(--danger-bg);
+      color: var(--danger-text);
+      border: 1px solid #fecaca;
+    }
+
+    .form-message.success {
+      display: block;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .auth-submit-btn {
+      width: 100%;
+      height: 44px;
+      background: var(--brand);
+      color: #ffffff;
+      border: 0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+    }
+
+    .auth-submit-btn:hover {
+      background: var(--brand-dark);
+    }
+
+    .auth-submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .auth-switch {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .auth-switch a {
+      color: var(--brand);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .auth-switch a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 860px) {
+      .auth-page {
+        grid-template-columns: 1fr;
+      }
+      .auth-brand-panel {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <main class="auth-page">
+    
+    <!-- LEFT BRAND SIDE -->
+    <section class="auth-brand-panel" aria-label="About TASKSPACE">
+      <a class="brand-lockup" href="/" aria-label="TASKSPACE Home">
+        <span class="brand-mark">T</span>
+        <strong>TASKSPACE</strong>
+      </a>
+
+      <div class="brand-copy">
+        <span class="eyebrow">Enterprise Management Suite</span>
+        <h1>Good work happens when teams connect.</h1>
+        <p>Bring your people, projects, and live operational analytics together in one calm, focused workspace.</p>
+      </div>
+
+      <div class="brand-footer">
+        TASKSPACE &bull; Your team's work, all in one place.
+      </div>
+    </section>
+
+    <!-- RIGHT FORM SIDE -->
+    <section class="auth-form-side">
+      <div class="auth-card">
+        <span class="eyebrow" id="auth-eyebrow">YOUR WORKSPACE</span>
+        <h2 id="auth-title">Sign In</h2>
+        <p class="auth-subtitle" id="auth-subtitle">Sign in to access your tasks and management dashboard.</p>
+
+        <!-- Role Type Selection -->
+        <div class="login-role-switch" id="role-switch">
+          <button class="login-role-button active" type="button" data-role="ADMIN">Admin / Manager</button>
+          <button class="login-role-button" type="button" data-role="EMPLOYEE">Employee</button>
+        </div>
+
+        <!-- Quick Demo Logins -->
+        <div class="quick-demos-wrap">
+          <div class="quick-demos-title">⚡ Quick Demo One-Click Fill</div>
+          <div class="demo-pills">
+            <button class="demo-pill-btn" type="button" onclick="fillDemo('admin@taskspace.com', 'password123', 'ADMIN')">👑 Admin (Sarah)</button>
+            <button class="demo-pill-btn" type="button" onclick="fillDemo('david.miller@taskspace.com', 'password123', 'ADMIN')">🛡️ Manager (David)</button>
+            <button class="demo-pill-btn" type="button" onclick="fillDemo('liam.j@taskspace.com', 'password123', 'EMPLOYEE')">💼 Employee (Liam)</button>
+          </div>
+        </div>
+
+        <div class="form-message" id="auth-message"></div>
+
+        <form id="auth-form">
+          <div class="form-field" id="name-field" style="display:none;">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" name="name" placeholder="Alex Morgan">
+          </div>
+
+          <div class="form-field">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" placeholder="you@company.com" required autocomplete="username">
+          </div>
+
+          <div class="form-field">
+            <label for="password">Password</label>
+            <div class="password-wrap">
+              <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
+              <button class="password-toggle" type="button" id="toggle-pw">Show</button>
+            </div>
+          </div>
+
+          <button class="auth-submit-btn" type="submit" id="submit-btn">
+            Sign In
+          </button>
+        </form>
+
+        <p class="auth-switch" id="mode-switch-text">
+          New to TASKSPACE? <a href="#" id="switch-to-signup">Create an account</a>
+        </p>
+
+        <p style="margin-top: 14px; text-align: center; font-size: 12px;">
+          <a href="/dashboard" style="color: var(--muted); text-decoration: none;">&larr; Return to Dashboard Directly</a>
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    let isSignup = false;
+    let selectedRole = "ADMIN";
+
+    const form = document.getElementById("auth-form");
+    const msg = document.getElementById("auth-message");
+    const submitBtn = document.getElementById("submit-btn");
+    const titleEl = document.getElementById("auth-title");
+    const eyebrowEl = document.getElementById("auth-eyebrow");
+    const subtitleEl = document.getElementById("auth-subtitle");
+    const nameField = document.getElementById("name-field");
+    const switchLink = document.getElementById("switch-to-signup");
+    const modeSwitchText = document.getElementById("mode-switch-text");
+    const roleSwitch = document.getElementById("role-switch");
+
+    // Toggle Password visibility
+    document.getElementById("toggle-pw").addEventListener("click", function() {
+      const pwInput = document.getElementById("password");
+      if (pwInput.type === "password") {
+        pwInput.type = "text";
+        this.textContent = "Hide";
+      } else {
+        pwInput.type = "password";
+        this.textContent = "Show";
+      }
+    });
+
+    // Role Buttons
+    document.querySelectorAll(".login-role-button").forEach(btn => {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".login-role-button").forEach(b => b.classList.remove("active"));
+        this.classList.add("active");
+        selectedRole = this.getAttribute("data-role");
+      });
+    });
+
+    // Switch between Sign in and Sign up
+    switchLink.addEventListener("click", function(e) {
+      e.preventDefault();
+      isSignup = !isSignup;
+      if (isSignup) {
+        eyebrowEl.textContent = "GET STARTED";
+        titleEl.textContent = "Create Account";
+        subtitleEl.textContent = "Sign up to join your organization's workspace.";
+        nameField.style.display = "flex";
+        roleSwitch.style.display = "none";
+        submitBtn.textContent = "Create Account";
+        modeSwitchText.innerHTML = 'Already have an account? <a href="#" id="switch-to-signin">Sign in</a>';
+        document.getElementById("switch-to-signin").addEventListener("click", switchLink.click);
+      } else {
+        eyebrowEl.textContent = "YOUR WORKSPACE";
+        titleEl.textContent = "Sign In";
+        subtitleEl.textContent = "Sign in to access your tasks and management dashboard.";
+        nameField.style.display = "none";
+        roleSwitch.style.display = "grid";
+        submitBtn.textContent = "Sign In";
+        modeSwitchText.innerHTML = 'New to TASKSPACE? <a href="#" id="switch-to-signup">Create an account</a>';
+        document.getElementById("switch-to-signup").addEventListener("click", switchLink.click);
+      }
+      hideMessage();
+    });
+
+    function showMessage(text, isError = true) {
+      msg.textContent = text;
+      msg.className = `form-message ${isError ? 'error' : 'success'}`;
+    }
+
+    function hideMessage() {
+      msg.className = "form-message";
+      msg.textContent = "";
+    }
+
+    // Quick demo fills
+    window.fillDemo = function(email, pw, role) {
+      document.getElementById("email").value = email;
+      document.getElementById("password").value = pw;
+      document.querySelectorAll(".login-role-button").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-role") === role);
+      });
+      selectedRole = role;
+      hideMessage();
+    };
+
+    // Form submission
+    form.addEventListener("submit", async function(e) {
+      e.preventDefault();
+      hideMessage();
+      submitBtn.disabled = true;
+      submitBtn.textContent = isSignup ? "Creating..." : "Signing in...";
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const name = document.getElementById("name").value.trim();
+
+      const endpoint = isSignup ? "/api/signup" : "/api/login";
+      const payload = isSignup ? { name, email, password } : { email, password };
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Authentication failed.");
+        }
+
+        if (isSignup) {
+          showMessage("Account created successfully! You can now sign in.", false);
+          setTimeout(() => switchLink.click(), 1200);
+        } else {
+          showMessage("Signed in successfully! Redirecting...", false);
+          const userRole = (data.user && data.user.role ? data.user.role : selectedRole).toUpperCase();
+          setTimeout(() => {
+            if (userRole === "ADMIN" || userRole === "MANAGER") {
+              window.location.href = "/dashboard";
+            } else {
+              window.location.href = "/";
+            }
+          }, 600);
+        }
+      } catch (err) {
+        showMessage(err.message, true);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSignup ? "Create Account" : "Sign In";
+      }
+    });
+
+    // Check if #signup is in the hash
+    if (window.location.hash === "#signup") {
+      switchLink.click();
+    }
+  </script>
+</body>
+</html>

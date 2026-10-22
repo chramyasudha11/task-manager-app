@@ -26,6 +26,12 @@ def home():
     return render_template("index.html")
 
 
+@app.route("/login")
+@app.route("/signup")
+def login_view():
+    return render_template("login.html")
+
+
 @app.route("/admin")
 @app.route("/manager")
 def admin_redirect():
