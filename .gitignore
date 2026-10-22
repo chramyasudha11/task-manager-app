@@ -5,3 +5,6 @@ users.db
 venv/
 .venv/
 setup_test_tasks.py
+powershell.cmd
+
+*.bak

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taskspace | Task Manager</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="{{ url_for('static', filename='js/api.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Taskspace home"><span class="brand-icon">t.</span><span><b>taskspace</b><small>YOUR PERSONAL WORKSPACE</small></span></a>
+      <div class="top-actions">
+        <a class="btn btn-light" href="/dashboard" style="text-decoration:none;font-weight:700;display:inline-flex;align-items:center;gap:6px;color:var(--olive-dark);">📊 Dashboard ⭐</a>
+        <button class="btn btn-light theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
+        <button class="btn btn-light" id="export-btn" type="button">↓ Export CSV</button>
+        <button class="btn btn-primary" id="new-task-btn" type="button">+ New task</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <p class="sidebar-label">WORKSPACE</p>
+      <nav class="workspace-nav" id="workspace-nav">
+        <button class="workspace-item active" type="button" data-view="all"><span>■</span><span>All tasks</span><b id="nav-all-count">0</b></button>
+        <button class="workspace-item" type="button" data-view="today"><span>◷</span><span>Due today</span></button>
+        <button class="workspace-item" type="button" data-view="upcoming"><span>□</span><span>Upcoming</span></button>
+        <button class="workspace-item" type="button" data-view="overdue"><span>!</span><span>Overdue</span></button>
+        <button class="workspace-item" type="button" data-view="completed"><span>✓</span><span>Completed</span><b id="nav-completed-count">0</b></button>
+      </nav>
+      <p class="sidebar-label" style="margin-top: 16px;">MANAGEMENT</p>
+      <nav class="workspace-nav">
+        <a class="workspace-item" href="/dashboard" style="text-decoration:none;"><span>📊</span><span>Admin &amp; Manager</span><b style="background:var(--olive);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">⭐</b></a>
+      </nav>
+      <p class="sidebar-label categories-label">CATEGORIES</p>
+      <nav id="sidebar-categories" class="sidebar-categories"></nav>
+      <p class="sidebar-note">Small steps. Meaningful progress.</p>
+    </aside><main>
+      <section class="intro">
+        <div><p class="eyebrow" id="view-eyebrow">ΓÇö YOUR DAY, YOUR PACE</p><h1 id="view-title">All tasks<span>.</span></h1><p class="subtitle" id="view-subtitle">A little progress every day adds up to big results.</p></div>
+        <div class="date-card"><span>Γûª</span><div><small>TODAY</small><b id="today-date">Today</b></div></div>
+      </section>
+
+      <section class="stats" aria-label="Task summary">
+        <article class="stat-card"><div>Total tasks <span class="stat-icon olive">Γûª</span></div><strong id="total-count">0</strong><small>Tasks in your workspace</small></article>
+        <article class="stat-card"><div>In progress <span class="stat-icon sand">Γù╖</span></div><strong id="progress-count">0</strong><small>Still on your list</small></article>
+        <article class="stat-card"><div>Completed <span class="stat-icon green">Γ£ô</span></div><strong id="completed-count">0</strong><small>Things you've finished</small></article>
+        <article class="stat-card"><div>Overdue <span class="stat-icon red">!</span></div><strong id="overdue-count">0</strong><small>Need your attention</small></article>
+      </section>
+
+      <section class="task-panel">
+        <div class="panel-title"><div><h2>Your task list</h2><p>Organise the details. Focus on what matters.</p></div><span class="count-pill"><b id="visible-count">0</b> tasks</span></div>
+        <div class="filters">
+          <label class="search"><span>Γîò</span><input id="search" type="search" placeholder="Search tasks, notes, labels..." aria-label="Search tasks"><kbd>/</kbd></label>
+          <select id="category-filter" aria-label="Filter category"><option value="">All categories</option></select>
+          <select id="priority-filter" aria-label="Filter priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select>
+          <select id="status-filter" aria-label="Filter status"><option value="">All statuses</option><option value="pending">In progress</option><option value="completed">Completed</option><option value="overdue">Overdue</option></select>
+          <select id="sort-filter" aria-label="Sort tasks"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title AΓÇôZ</option></select>
+        </div>
+        <div class="bulk-bar" id="bulk-bar" hidden><label><input id="select-all" type="checkbox"> Select visible</label><span><b id="selected-count">0</b> selected</span><button class="link-btn" id="bulk-complete">Complete selected</button><button class="link-btn danger" id="bulk-delete">Delete selected</button></div>
+        <div id="task-list" class="task-list" aria-live="polite"></div>
+      </section>
+      <footer><span>Made for a more focused day.</span><span>Task Manager · Member 5 UI &amp; Member 6 Dashboard ⭐</span></footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="task-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head"><div><p class="eyebrow">TASK DETAILS</p><h2 id="modal-title">Create a new task</h2></div><button id="close-modal" class="close-btn" type="button" aria-label="Close">├ù</button></div>
+      <form id="task-form">
+        <label class="field">Task title *<input name="title" required maxlength="180" placeholder="What needs to get done?"></label>
+        <label class="field">Description<textarea name="description" rows="2" placeholder="Add a short description..."></textarea></label>
+        <div class="form-grid">
+          <label class="field">Category<select name="category" id="task-category" required></select></label>
+          <label class="field">Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+          <label class="field">Due date<input name="due_date" type="date"></label>
+          <label class="field">Labels<input name="labels" placeholder="college, urgent, team"></label>
+        </div>
+        <label class="field">Notes<textarea name="notes" rows="3" placeholder="Extra details or reminders..."></textarea></label>
+        <label class="check-label"><input name="completed" type="checkbox"> Mark as completed</label>
+        <div class="modal-actions"><button class="btn btn-light" id="cancel-modal" type="button">Cancel</button><button class="btn btn-primary" id="save-btn" type="submit">Save task</button></div>
+      </form>
+    </section>
+  </div>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+</body>
+</html>

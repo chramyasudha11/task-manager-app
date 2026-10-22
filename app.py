@@ -1,5 +1,6 @@
+
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 from auth import auth_bp, init_db
 from dashboard import dashboard_bp
@@ -22,7 +23,13 @@ app.register_blueprint(dashboard_bp)
 
 @app.route("/")
 def home():
-    return jsonify({"message": "Task Manager API is running"})
+    return render_template("index.html")
+
+
+@app.route("/admin")
+@app.route("/manager")
+def admin_redirect():
+    return render_template("dashboard.html")
 
 
 if __name__ == "__main__":

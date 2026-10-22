@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Executive Admin + Manager Dashboard | Taskspace</title>
+  
+  <!-- Custom Dashboard CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  
+  <!-- Chart.js (Local offline copy with CDN fallback) -->
+  <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+  <script>
+    if (typeof Chart === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Dashboard Controller -->
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+</head>
+<body>
+
+  <div class="dashboard-container">
+    
+    <!-- TOP HEADER -->
+    <header class="dash-topbar">
+      <div class="dash-brand">
+        <div class="brand-badge-icon">t.</div>
+        <div class="dash-brand-title">
+          <h1>
+            taskspace
+            <span class="member-badge">Member 6 ⭐</span>
+          </h1>
+          <p>Admin &amp; Manager Executive Command Center</p>
+        </div>
+      </div>
+
+      <div class="dash-actions">
+        <!-- Return to Tasks App -->
+        <a class="btn btn-light" href="/" title="Return to Individual Tasks Workspace">
+          <span>←</span> Tasks Workspace
+        </a>
+
+        <!-- Persona / Role Selector -->
+        <div class="user-persona-box">
+          <div class="user-persona-avatar" id="active-user-avatar">SC</div>
+          <div class="user-persona-info">
+            <span class="uname" id="active-user-name">Sarah Chen</span>
+            <span class="urole" id="active-user-role">ADMIN • Management</span>
+          </div>
+          <select id="persona-role-select" class="role-select" title="Switch User Role Persona">
+            <option value="ADMIN">👑 Sarah Chen (Admin)</option>
+            <option value="MANAGER">🛡️ David Miller (Manager)</option>
+            <option value="EMPLOYEE">💼 Liam Johnson (Employee)</option>
+          </select>
+        </div>
+
+        <!-- Export CSV -->
+        <button class="btn btn-light" id="export-csv-btn" type="button" title="Export Employee &amp; Task Report as CSV">
+          <span>📥</span> Export CSV
+        </button>
+
+        <!-- Refresh Button -->
+        <button class="btn btn-light" id="refresh-btn" type="button" title="Refresh Live Analytics">
+          <span>🔄</span> Refresh
+        </button>
+
+        <!-- Theme Toggle -->
+        <button class="btn btn-light theme-toggle-btn" id="theme-toggle" type="button" title="Toggle Dark/Light Mode">
+          🌗
+        </button>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="dashboard-tabs-bar">
+      <div class="tab-nav-group">
+        <button class="tab-btn active" data-tab="admin" type="button">
+          <span>📊</span>
+          <span>Admin &amp; Executive Overview</span>
+        </button>
+        <button class="tab-btn" data-tab="manager" type="button">
+          <span>⭐</span>
+          <span>Manager View</span>
+          <span class="tab-badge" id="mgr-tab-badge">Focus</span>
+        </button>
+        <button class="tab-btn" data-tab="employees" type="button">
+          <span>👥</span>
+          <span>Employee Breakdown</span>
+          <span class="tab-badge">48</span>
+        </button>
+      </div>
+
+      <div class="dashboard-date-indicator">
+        <span>📅</span>
+        <span>Sprint Period: <b>Q4 Target 2026</b></span>
+      </div>
+    </nav>
+
+    <!-- ========================================================================= -->
+    <!-- KPI CARDS SECTION -->
+    <!-- ========================================================================= -->
+    <section class="kpi-section" aria-label="Key Performance Indicators">
+      <div class="kpi-grid">
+        
+        <!-- Total Employees: 48 -->
+        <article class="kpi-card kpi-employees">
+          <div class="kpi-header">
+            <span class="kpi-title">Total Employees</span>
+            <div class="kpi-icon-wrap">👥</div>
+          </div>
+          <div class="kpi-value" id="kpi-total-employees">48</div>
+          <div class="kpi-footer">
+            <span class="kpi-pill info">5 Functional Teams</span>
+            <span class="kpi-subtext">1 Admin • 4 Managers • 43 Staff</span>
+          </div>
+        </article>
+
+        <!-- Total Tasks: 326 -->
+        <article class="kpi-card kpi-tasks">
+          <div class="kpi-header">
+            <span class="kpi-title">Total Tasks</span>
+            <div class="kpi-icon-wrap">📋</div>
+          </div>
+          <div class="kpi-value" id="kpi-total-tasks">326</div>
+          <div class="kpi-footer">
+            <span class="kpi-pill neutral">6 Projects</span>
+            <span class="kpi-subtext">Active Org-wide Workspace</span>
+          </div>
+        </article>
+
+        <!-- Completed: 218 -->
+        <article class="kpi-card kpi-completed">
+          <div class="kpi-header">
+            <span class="kpi-title">Completed</span>
+            <div class="kpi-icon-wrap">✅</div>
+          </div>
+          <div class="kpi-value" id="kpi-completed-tasks" style="color: #10b981;">218</div>
+          <div class="kpi-footer">
+            <span class="kpi-pill success" id="badge-completion-rate">66.9% Completed</span>
+            <span class="kpi-subtext">↑ +14% vs last sprint</span>
+          </div>
+        </article>
+
+        <!-- Overdue: 31 -->
+        <article class="kpi-card kpi-overdue">
+          <div class="kpi-header">
+            <span class="kpi-title">Overdue</span>
+            <div class="kpi-icon-wrap">⚠️</div>
+          </div>
+          <div class="kpi-value" id="kpi-overdue-tasks" style="color: #ef4444;">31</div>
+          <div class="kpi-footer">
+            <span class="kpi-pill warning" id="badge-overdue-rate">9.5% of Total</span>
+            <span class="kpi-subtext">Requires Manager Action</span>
+          </div>
+        </article>
+
+      </div>
+
+      <!-- Secondary Metrics Bar -->
+      <div class="kpi-auxiliary-bar">
+        <div class="aux-item">
+          <span class="aux-icon">🔄</span>
+          <div class="aux-text">
+            <small>In Progress</small>
+            <b id="aux-in-progress">46 tasks</b>
+          </div>
+        </div>
+        <div class="aux-item">
+          <span class="aux-icon">⏳</span>
+          <div class="aux-text">
+            <small>Pending Backlog</small>
+            <b id="aux-pending">31 tasks</b>
+          </div>
+        </div>
+        <div class="aux-item">
+          <span class="aux-icon">📈</span>
+          <div class="aux-text">
+            <small>Overall Completion Rate</small>
+            <b id="aux-completion-rate">66.9%</b>
+          </div>
+        </div>
+        <div class="aux-item">
+          <span class="aux-icon">⚡</span>
+          <div class="aux-text">
+            <small>Delivery Velocity</small>
+            <b id="aux-velocity-score">94.2%</b>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- CHARTS SECTION (7 Visualizations) -->
+    <!-- ========================================================================= -->
+    <section class="charts-section" id="admin-charts-section">
+      
+      <!-- ROW 1: Trend & Donut (2 Columns) -->
+      <div class="charts-row-2">
+        <!-- 1. Task Completion Trend -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>📈</span> Task Completion Trend</h3>
+              <p>Cumulative task completions vs total created over the last 6 months</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-completion-trend"></canvas>
+          </div>
+        </div>
+
+        <!-- 2. Pending vs Completed -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>🍩</span> Pending vs Completed</h3>
+              <p>Operational status breakdown</p>
+            </div>
+          </div>
+          <div class="chart-wrapper" style="position:relative;">
+            <canvas id="chart-pending-completed"></canvas>
+            <div class="donut-center-metric">
+              <strong>66.9%</strong>
+              <span>Done</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2: Priority, Project, Team (3 Columns) -->
+      <div class="charts-row-3">
+        <!-- 3. Tasks by Priority -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>🎯</span> Tasks by Priority</h3>
+              <p>High (74) • Medium (182) • Low (70)</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-tasks-priority"></canvas>
+          </div>
+        </div>
+
+        <!-- 4. Tasks by Project -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>📁</span> Tasks by Project</h3>
+              <p>Distribution across 6 active product projects</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-tasks-project"></canvas>
+          </div>
+        </div>
+
+        <!-- 5. Tasks by Team -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>🏢</span> Tasks by Team</h3>
+              <p>Allocation across organizational units</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-tasks-team"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3: Workload & Performance (2 Columns) -->
+      <div class="charts-row-2">
+        <!-- 6. Employee Workload -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>⚖️</span> Employee Workload</h3>
+              <p>Active pending assignments vs completed tasks for key team members</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-employee-workload"></canvas>
+          </div>
+        </div>
+
+        <!-- 7. Employee Performance -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-area">
+              <h3><span>🏆</span> Employee Performance</h3>
+              <p>On-time completion and delivery rate (%)</p>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-employee-performance"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- EMPLOYEE BREAKDOWN TABLE -->
+    <!-- Columns: Employee | Assigned | Completed | Pending | Overdue -->
+    <!-- ========================================================================= -->
+    <section class="table-section" id="employee-table-section">
+      <div class="chart-card-header" style="border:0;padding:0;margin-bottom:16px;">
+        <div class="chart-title-area">
+          <h3>
+            <span>👥</span>
+            Employee Performance &amp; Assignment Table
+            <span class="badge-tag team-backend" id="emp-count-badge">48 Employees</span>
+          </h3>
+          <p>Breakdown of all 48 team members with workload, progress, and overdue indicators</p>
+        </div>
+      </div>
+
+      <!-- Controls: Search, Team Filter, Overdue Toggle -->
+      <div class="table-controls">
+        <div class="table-filter-group">
+          <!-- Search -->
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="search" id="emp-search" placeholder="Search by name, role, email..." aria-label="Search employee">
+          </div>
+
+          <!-- Team Filter -->
+          <select id="team-filter" class="filter-select" aria-label="Filter by Team">
+            <option value="">All Functional Teams</option>
+            <option value="Backend">Backend Team</option>
+            <option value="Frontend">Frontend Team</option>
+            <option value="DevOps & Infra">DevOps &amp; Infra</option>
+            <option value="QA & Automation">QA &amp; Automation</option>
+            <option value="Product">Product &amp; Architecture</option>
+            <option value="Design & UX">Design &amp; UI/UX</option>
+            <option value="Management">Executive Management</option>
+          </select>
+
+          <!-- Show Overdue Only Checkbox -->
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="overdue-toggle">
+            <span>Show Only Overdue</span>
+          </label>
+        </div>
+
+        <div>
+          <button class="btn btn-outline" onclick="sortTableBy('overdue')" type="button" style="font-size:12px;">
+            Sort by Overdue ⚠️
+          </button>
+        </div>
+      </div>
+
+      <!-- Table View -->
+      <div class="table-responsive">
+        <table class="data-table" id="employee-table">
+          <thead>
+            <tr>
+              <th onclick="sortTableBy('name')">Employee ↕</th>
+              <th onclick="sortTableBy('team')">Team ↕</th>
+              <th onclick="sortTableBy('assigned')">Assigned ↕</th>
+              <th onclick="sortTableBy('completed')">Completed ↕</th>
+              <th onclick="sortTableBy('pending')">Pending ↕</th>
+              <th onclick="sortTableBy('overdue')">Overdue ↕</th>
+              <th onclick="sortTableBy('completion_pct')">Completion % ↕</th>
+            </tr>
+          </thead>
+          <tbody id="employee-table-body">
+            <!-- Dynamically populated by dashboard.js -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Footer -->
+      <div class="pagination-bar">
+        <div>
+          Showing <span id="showing-range">1 - 10</span> of <span id="total-emp-count">48</span> employees
+        </div>
+        <div class="pagination-controls" id="pagination-btns">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- DEDICATED MANAGER VIEW -->
+    <!-- ========================================================================= -->
+    <section class="manager-view-container" id="manager-view-section" style="display:none;">
+      
+      <!-- SECTION 1: Team Progress -->
+      <div>
+        <div class="mgr-section-header">
+          <h3><span>📊</span> Team Progress</h3>
+          <span style="font-size:13px;color:var(--text-muted)">Live deliverables by functional team</span>
+        </div>
+        <div class="team-progress-grid" id="team-progress-grid">
+          <!-- Populated by dashboard.js -->
+        </div>
+      </div>
+
+      <!-- SECTION 2 & 3: Team Workload & Team Completion % -->
+      <div class="charts-row-2">
+        <!-- Team Workload Capacity -->
+        <div class="workload-meter-card">
+          <div class="mgr-section-header">
+            <h3><span>⚖️</span> Team Workload &amp; Capacity Utilization</h3>
+          </div>
+          <div id="team-workload-meters">
+            <!-- Populated by dashboard.js -->
+          </div>
+        </div>
+
+        <!-- High Priority Critical Tasks -->
+        <div class="chart-card">
+          <div class="mgr-section-header">
+            <h3><span>🎯</span> High Priority Tasks</h3>
+            <span class="badge-tag team-frontend">Urgent</span>
+          </div>
+          <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Task Title</th>
+                  <th>Status</th>
+                  <th>Due Date</th>
+                  <th>Assignee</th>
+                </tr>
+              </thead>
+              <tbody id="high-priority-table-body">
+                <!-- Populated by dashboard.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 4: Overdue Tasks Alert Desk (The 31 Overdue Tasks) -->
+      <div class="alert-card-panel">
+        <div class="mgr-section-header">
+          <div>
+            <h3 style="color:var(--red-text);">
+              <span>🚨</span> Overdue Tasks Action Desk
+              <span class="tab-badge" id="mgr-overdue-count" style="background:#ef4444;color:#fff;">31 Critical Tasks</span>
+            </h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+              Immediate manager intervention required. Send reminder alerts or reassign overdue work items.
+            </p>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Task &amp; Project</th>
+                <th>Priority</th>
+                <th>Due Date &amp; Overdue By</th>
+                <th>Assignee</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="overdue-tasks-table-body">
+              <!-- Populated by dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- FOOTER -->
+    <footer style="margin-top:48px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;color:var(--text-muted);font-size:12px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <b>Taskspace Management Suite</b> • Member 6 Admin + Manager Dashboard
+      </div>
+      <div>
+        <span>Total Employees: <b>48</b> | Total Tasks: <b>326</b> | Completed: <b>218</b> | Overdue: <b>31</b></span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- EMPLOYEE DETAILS MODAL -->
+  <div class="modal-overlay" id="emp-modal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div class="emp-avatar" id="modal-emp-avatar" style="width:44px;height:44px;font-size:16px;">AB</div>
+          <div>
+            <h3 id="modal-emp-name" style="font-size:17px;font-weight:700;">Employee Name</h3>
+            <p id="modal-emp-title" style="font-size:12px;color:var(--text-muted)">Role • Department</p>
+          </div>
+        </div>
+        <button class="modal-close" id="close-modal-btn" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <span style="font-size:12px;color:var(--text-muted)">Email Address:</span>
+        <b id="modal-emp-email" style="display:block;font-size:14px;">employee@taskspace.com</b>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+        <div style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center;">
+          <small style="color:var(--text-muted);font-size:11px;display:block;">Assigned</small>
+          <b id="modal-assigned" style="font-size:18px;">0</b>
+        </div>
+        <div style="background:var(--green);border-radius:10px;padding:12px;text-align:center;">
+          <small style="color:var(--green-text);font-size:11px;display:block;">Completed</small>
+          <b id="modal-completed" style="font-size:18px;color:var(--green-text);">0</b>
+        </div>
+        <div style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center;">
+          <small style="color:var(--text-muted);font-size:11px;display:block;">Pending</small>
+          <b id="modal-pending" style="font-size:18px;">0</b>
+        </div>
+        <div style="background:var(--red);border-radius:10px;padding:12px;text-align:center;">
+          <small style="color:var(--red-text);font-size:11px;display:block;">Overdue</small>
+          <b id="modal-overdue" style="font-size:18px;color:var(--red-text);">0</b>
+        </div>
+      </div>
+
+      <div style="background:var(--olive-soft);padding:14px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <b style="color:var(--olive-dark);font-size:13px;">Performance Score</b>
+          <p style="font-size:11px;color:var(--text-muted);">Calculated based on velocity and on-time task delivery</p>
+        </div>
+        <span id="modal-score" style="font-size:20px;font-weight:800;color:var(--olive-dark);">92/100</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-shelf" class="toast-shelf"></div>
+
+</body>
+</html>
