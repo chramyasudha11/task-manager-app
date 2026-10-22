@@ -1,7 +1,7 @@
 /**
- * Member 6 — Admin + Manager Dashboard Controller
- * Manages KPI metrics, 7 Chart.js visualizations, 48-employee table,
- * and dedicated Manager View.
+ * TASKSPACE — Executive Admin & Manager Dashboard Controller
+ * Professional enterprise analytics, 7 Chart.js visualizations,
+ * 48-employee table, and Manager Command Center.
  */
 
 let chartInstances = {};
@@ -15,28 +15,10 @@ let currentTab = "admin"; // 'admin', 'manager', 'employees'
 
 // Document Ready
 document.addEventListener("DOMContentLoaded", async () => {
-  initTheme();
   setupEventListeners();
   await initSessionUser();
   await loadDashboardData();
 });
-
-// Theme Management
-function initTheme() {
-  const saved = localStorage.getItem("taskspace_theme");
-  if (saved === "dark") {
-    document.body.classList.add("dark");
-  }
-}
-
-function toggleTheme() {
-  document.body.classList.toggle("dark");
-  const isDark = document.body.classList.contains("dark");
-  localStorage.setItem("taskspace_theme", isDark ? "dark" : "light");
-  
-  // Re-render charts with theme-adjusted colors
-  updateChartThemes(isDark);
-}
 
 // Session & Role Switching
 async function initSessionUser() {
@@ -94,16 +76,13 @@ async function handleRoleSwitch(targetRole) {
 
 // Setup DOM Event Listeners
 function setupEventListeners() {
-  // Theme toggle
-  document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
-
   // Refresh
   document.getElementById("refresh-btn")?.addEventListener("click", async () => {
     showToast("Refreshing live analytics...");
     await loadDashboardData();
   });
 
-  // Export
+  // Export CSV
   document.getElementById("export-csv-btn")?.addEventListener("click", exportEmployeesCSV);
 
   // Tab switching
@@ -203,8 +182,8 @@ function renderKPIs(kpi) {
   document.getElementById("kpi-overdue-tasks").textContent = kpi.overdue;
 
   // Secondary counts
-  document.getElementById("aux-in-progress").textContent = kpi.in_progress;
-  document.getElementById("aux-pending").textContent = kpi.pending_active;
+  document.getElementById("aux-in-progress").textContent = `${kpi.in_progress} tasks`;
+  document.getElementById("aux-pending").textContent = `${kpi.pending_active} tasks`;
   document.getElementById("aux-completion-rate").textContent = `${kpi.completion_rate}%`;
   document.getElementById("aux-velocity-score").textContent = `${kpi.team_velocity_score}%`;
 
@@ -213,62 +192,54 @@ function renderKPIs(kpi) {
   document.getElementById("badge-overdue-rate").textContent = `${kpi.overdue_rate}% of Total`;
 }
 
-// Chart.js Theme Helpers
-function getChartThemeColors(isDark) {
-  return {
-    textColor: isDark ? "#a3a192" : "#737367",
-    gridColor: isDark ? "#33352b" : "#e5dfd0",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  };
-}
-
-function updateChartThemes(isDark) {
-  const theme = getChartThemeColors(isDark);
-  Object.values(chartInstances).forEach(chart => {
-    if (chart && chart.options) {
-      if (chart.options.scales) {
-        Object.values(chart.options.scales).forEach(scale => {
-          if (scale.ticks) scale.ticks.color = theme.textColor;
-          if (scale.grid) scale.grid.color = theme.gridColor;
-        });
-      }
-      if (chart.options.plugins && chart.options.plugins.legend) {
-        chart.options.plugins.legend.labels.color = theme.textColor;
-      }
-      chart.update();
-    }
-  });
-}
+// Chart.js Professional Configuration
+const CHART_THEME = {
+  textColor: "#64748b",
+  titleColor: "#0f172a",
+  gridColor: "#f1f5f9",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  tooltip: {
+    backgroundColor: "#ffffff",
+    titleColor: "#0f172a",
+    bodyColor: "#334155",
+    borderColor: "#e2e8f0",
+    borderWidth: 1,
+    padding: 12,
+    boxPadding: 6,
+    usePointStyle: true,
+    cornerRadius: 8,
+    shadowColor: "rgba(0,0,0,0.06)",
+    titleFont: { size: 12, weight: "bold" },
+    bodyFont: { size: 12 }
+  }
+};
 
 // Render All 7 Charts
 function renderCharts(data) {
-  const isDark = document.body.classList.contains("dark");
-  const theme = getChartThemeColors(isDark);
-
   // 1. Task Completion Trend
-  renderTrendChart(data.trend, theme);
+  renderTrendChart(data.trend);
 
   // 2. Pending vs Completed
-  renderPendingVsCompletedChart(data.pending_vs_completed, theme);
+  renderPendingVsCompletedChart(data.pending_vs_completed);
 
   // 3. Tasks by Priority
-  renderPriorityChart(data.tasks_by_priority, theme);
+  renderPriorityChart(data.tasks_by_priority);
 
   // 4. Tasks by Project
-  renderProjectChart(data.tasks_by_project, theme);
+  renderProjectChart(data.tasks_by_project);
 
   // 5. Tasks by Team
-  renderTeamChart(data.tasks_by_team, theme);
+  renderTeamChart(data.tasks_by_team);
 
   // 6. Employee Workload
-  renderWorkloadChart(data.employee_workload, theme);
+  renderWorkloadChart(data.employee_workload);
 
   // 7. Employee Performance
-  renderPerformanceChart(data.employee_performance, theme);
+  renderPerformanceChart(data.employee_performance);
 }
 
 // 1. Trend Chart
-function renderTrendChart(trend, theme) {
+function renderTrendChart(trend) {
   const ctx = document.getElementById("chart-completion-trend")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.trend) chartInstances.trend.destroy();
@@ -282,21 +253,27 @@ function renderTrendChart(trend, theme) {
           label: "Completed Tasks",
           data: trend.completed,
           borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.12)",
+          backgroundColor: "rgba(16, 185, 129, 0.08)",
           fill: true,
           tension: 0.35,
-          borderWidth: 3,
+          borderWidth: 2.5,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#10b981",
+          pointBorderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 6
         },
         {
           label: "Total Created Tasks",
           data: trend.created,
-          borderColor: "#69764b",
+          borderColor: "#3b82f6",
           backgroundColor: "transparent",
-          borderDash: [5, 5],
+          borderDash: [4, 4],
           tension: 0.35,
           borderWidth: 2,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#3b82f6",
+          pointBorderWidth: 2,
           pointRadius: 3
         }
       ]
@@ -307,23 +284,26 @@ function renderTrendChart(trend, theme) {
       plugins: {
         legend: {
           position: "top",
-          labels: { color: theme.textColor, font: { family: theme.fontFamily, size: 12 } }
+          align: "end",
+          labels: {
+            color: CHART_THEME.textColor,
+            boxWidth: 12,
+            boxHeight: 12,
+            usePointStyle: true,
+            font: { family: CHART_THEME.fontFamily, size: 12, weight: "500" }
+          }
         },
-        tooltip: {
-          backgroundColor: "rgba(30,30,25,0.9)",
-          padding: 10,
-          cornerRadius: 8
-        }
+        tooltip: CHART_THEME.tooltip
       },
       scales: {
         x: {
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+          grid: { display: false },
+          ticks: { color: CHART_THEME.textColor, font: { family: CHART_THEME.fontFamily, size: 11 } }
         },
         y: {
           beginAtZero: true,
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+          grid: { color: CHART_THEME.gridColor },
+          ticks: { color: CHART_THEME.textColor, font: { family: CHART_THEME.fontFamily, size: 11 } }
         }
       }
     }
@@ -331,7 +311,7 @@ function renderTrendChart(trend, theme) {
 }
 
 // 2. Pending vs Completed Donut Chart
-function renderPendingVsCompletedChart(pvc, theme) {
+function renderPendingVsCompletedChart(pvc) {
   const ctx = document.getElementById("chart-pending-completed")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.pvc) chartInstances.pvc.destroy();
@@ -342,27 +322,34 @@ function renderPendingVsCompletedChart(pvc, theme) {
       labels: pvc.labels,
       datasets: [{
         data: pvc.data,
-        backgroundColor: ["#10b981", "#f59e0b", "#6b7280", "#ef4444"],
-        borderWidth: 0,
+        backgroundColor: ["#10b981", "#f59e0b", "#94a3b8", "#ef4444"],
+        borderWidth: 2,
+        borderColor: "#ffffff",
         hoverOffset: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: "74%",
+      cutout: "75%",
       plugins: {
         legend: {
           position: "bottom",
-          labels: { color: theme.textColor, font: { size: 11, family: theme.fontFamily }, boxWidth: 12 }
-        }
+          labels: {
+            color: CHART_THEME.textColor,
+            font: { size: 11, family: CHART_THEME.fontFamily },
+            boxWidth: 10,
+            usePointStyle: true
+          }
+        },
+        tooltip: CHART_THEME.tooltip
       }
     }
   });
 }
 
 // 3. Priority Chart
-function renderPriorityChart(priority, theme) {
+function renderPriorityChart(priority) {
   const ctx = document.getElementById("chart-tasks-priority")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.priority) chartInstances.priority.destroy();
@@ -375,25 +362,26 @@ function renderPriorityChart(priority, theme) {
         label: "Tasks Count",
         data: priority.data,
         backgroundColor: ["#ef4444", "#f59e0b", "#10b981"],
-        borderRadius: 8,
-        borderSkipped: false
+        borderRadius: 6,
+        barThickness: 34
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false }
+        legend: { display: false },
+        tooltip: CHART_THEME.tooltip
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily, weight: "bold" } }
+          ticks: { color: CHART_THEME.textColor, font: { family: CHART_THEME.fontFamily, weight: "600", size: 12 } }
         },
         y: {
           beginAtZero: true,
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+          grid: { color: CHART_THEME.gridColor },
+          ticks: { color: CHART_THEME.textColor, font: { family: CHART_THEME.fontFamily, size: 11 } }
         }
       }
     }
@@ -401,7 +389,7 @@ function renderPriorityChart(priority, theme) {
 }
 
 // 4. Project Chart
-function renderProjectChart(projects, theme) {
+function renderProjectChart(projects) {
   const ctx = document.getElementById("chart-tasks-project")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.project) chartInstances.project.destroy();
@@ -413,8 +401,9 @@ function renderProjectChart(projects, theme) {
       datasets: [{
         label: "Tasks",
         data: projects.data,
-        backgroundColor: "#69764b",
-        borderRadius: 6
+        backgroundColor: "#2563eb",
+        borderRadius: 4,
+        barThickness: 16
       }]
     },
     options: {
@@ -422,17 +411,18 @@ function renderProjectChart(projects, theme) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false }
+        legend: { display: false },
+        tooltip: CHART_THEME.tooltip
       },
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor }
+          grid: { color: CHART_THEME.gridColor },
+          ticks: { color: CHART_THEME.textColor, font: { size: 11 } }
         },
         y: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { size: 11 } }
+          ticks: { color: CHART_THEME.textColor, font: { size: 11, family: CHART_THEME.fontFamily } }
         }
       }
     }
@@ -440,7 +430,7 @@ function renderProjectChart(projects, theme) {
 }
 
 // 5. Team Chart
-function renderTeamChart(teams, theme) {
+function renderTeamChart(teams) {
   const ctx = document.getElementById("chart-tasks-team")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.team) chartInstances.team.destroy();
@@ -452,25 +442,27 @@ function renderTeamChart(teams, theme) {
       datasets: [{
         label: "Assigned Tasks",
         data: teams.data,
-        backgroundColor: ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#69764b"],
-        borderRadius: 8
+        backgroundColor: ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#64748b"],
+        borderRadius: 6,
+        barThickness: 28
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false }
+        legend: { display: false },
+        tooltip: CHART_THEME.tooltip
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { size: 11 } }
+          ticks: { color: CHART_THEME.textColor, font: { size: 11, family: CHART_THEME.fontFamily } }
         },
         y: {
           beginAtZero: true,
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor }
+          grid: { color: CHART_THEME.gridColor },
+          ticks: { color: CHART_THEME.textColor, font: { size: 11 } }
         }
       }
     }
@@ -478,7 +470,7 @@ function renderTeamChart(teams, theme) {
 }
 
 // 6. Workload Chart
-function renderWorkloadChart(workload, theme) {
+function renderWorkloadChart(workload) {
   const ctx = document.getElementById("chart-employee-workload")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.workload) chartInstances.workload.destroy();
@@ -492,13 +484,13 @@ function renderWorkloadChart(workload, theme) {
           label: "Active / Pending",
           data: workload.active,
           backgroundColor: "#f59e0b",
-          borderRadius: 6
+          borderRadius: 4
         },
         {
           label: "Completed",
           data: workload.completed,
           backgroundColor: "#10b981",
-          borderRadius: 6
+          borderRadius: 4
         }
       ]
     },
@@ -509,27 +501,34 @@ function renderWorkloadChart(workload, theme) {
         x: {
           stacked: true,
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { size: 10 } }
+          ticks: { color: CHART_THEME.textColor, font: { size: 10, family: CHART_THEME.fontFamily } }
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          grid: { color: theme.gridColor },
-          ticks: { color: theme.textColor }
+          grid: { color: CHART_THEME.gridColor },
+          ticks: { color: CHART_THEME.textColor, font: { size: 11 } }
         }
       },
       plugins: {
         legend: {
           position: "top",
-          labels: { color: theme.textColor, font: { size: 11 } }
-        }
+          align: "end",
+          labels: {
+            color: CHART_THEME.textColor,
+            font: { size: 11, family: CHART_THEME.fontFamily },
+            boxWidth: 10,
+            usePointStyle: true
+          }
+        },
+        tooltip: CHART_THEME.tooltip
       }
     }
   });
 }
 
 // 7. Performance Chart
-function renderPerformanceChart(performance, theme) {
+function renderPerformanceChart(performance) {
   const ctx = document.getElementById("chart-employee-performance")?.getContext("2d");
   if (!ctx) return;
   if (chartInstances.performance) chartInstances.performance.destroy();
@@ -542,7 +541,8 @@ function renderPerformanceChart(performance, theme) {
         label: "Completion Rate (%)",
         data: performance.rates,
         backgroundColor: "#10b981",
-        borderRadius: 6
+        borderRadius: 4,
+        barThickness: 16
       }]
     },
     options: {
@@ -552,8 +552,9 @@ function renderPerformanceChart(performance, theme) {
       plugins: {
         legend: { display: false },
         tooltip: {
+          ...CHART_THEME.tooltip,
           callbacks: {
-            label: (ctx) => ` ${ctx.raw}% On-Time Delivery`
+            label: (ctx) => ` ${ctx.raw}% On-Time Delivery Rate`
           }
         }
       },
@@ -561,15 +562,16 @@ function renderPerformanceChart(performance, theme) {
         x: {
           min: 0,
           max: 100,
-          grid: { color: theme.gridColor },
+          grid: { color: CHART_THEME.gridColor },
           ticks: {
-            color: theme.textColor,
+            color: CHART_THEME.textColor,
+            font: { size: 11 },
             callback: v => `${v}%`
           }
         },
         y: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { size: 11 } }
+          ticks: { color: CHART_THEME.textColor, font: { size: 11, family: CHART_THEME.fontFamily } }
         }
       }
     }
@@ -666,7 +668,7 @@ function renderTable() {
         </td>
         <td><span class="badge-tag ${teamClass}">${emp.team}</span></td>
         <td><span class="num-pill">${emp.assigned}</span></td>
-        <td><span class="num-pill" style="color:var(--green-text);font-weight:700;">${emp.completed}</span></td>
+        <td><span class="num-pill" style="color:var(--success);font-weight:700;">${emp.completed}</span></td>
         <td><span class="num-pill">${emp.pending}</span></td>
         <td><span class="${overdueClass}">${emp.overdue}</span></td>
         <td>
@@ -674,7 +676,7 @@ function renderTable() {
             <div class="progress-track">
               <div class="progress-fill" style="width: ${emp.completion_pct}%"></div>
             </div>
-            <span style="font-weight:700;font-size:12px;">${emp.completion_pct}%</span>
+            <span style="font-weight:700;font-size:12px;color:var(--text-primary);">${emp.completion_pct}%</span>
           </div>
         </td>
       </tr>
@@ -788,25 +790,25 @@ function renderManagerView(data) {
               <h4>${t.team}</h4>
               <span class="team-lead-text">Lead: ${t.lead} (${t.member_count} members)</span>
             </div>
-            <span class="badge-tag" style="background:${isOk ? 'var(--green)' : 'var(--red)'};color:${isOk ? 'var(--green-text)' : 'var(--red-text)'};font-weight:700;">
+            <span class="badge-tag" style="background:${isOk ? 'var(--success-bg)' : 'var(--danger-bg)'};color:${isOk ? 'var(--success-text)' : 'var(--danger-text)'};font-weight:700;">
               ${t.status}
             </span>
           </div>
 
           <div class="team-stats-row">
             <div><small style="color:var(--text-muted)">Total</small><b>${t.total_tasks}</b></div>
-            <div><small style="color:var(--text-muted)">Done</small><b style="color:var(--green-text)">${t.completed}</b></div>
+            <div><small style="color:var(--text-muted)">Done</small><b style="color:var(--success)">${t.completed}</b></div>
             <div><small style="color:var(--text-muted)">Pending</small><b>${t.pending}</b></div>
-            <div><small style="color:var(--text-muted)">Overdue</small><b style="color:${t.overdue > 0 ? 'var(--red-text)' : 'inherit'}">${t.overdue}</b></div>
+            <div><small style="color:var(--text-muted)">Overdue</small><b style="color:${t.overdue > 0 ? 'var(--danger)' : 'inherit'}">${t.overdue}</b></div>
           </div>
 
           <div>
-            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-              <span>Completion Rate</span>
-              <b>${t.completion_pct}%</b>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">
+              <span style="color:var(--text-muted)">Completion Rate</span>
+              <b style="color:var(--text-primary)">${t.completion_pct}%</b>
             </div>
             <div class="progress-track">
-              <div class="progress-fill" style="width:${t.completion_pct}%;background:${isOk ? 'var(--olive)' : '#ef4444'}"></div>
+              <div class="progress-fill" style="width:${t.completion_pct}%;background:${isOk ? 'var(--brand)' : 'var(--danger)'}"></div>
             </div>
           </div>
         </div>
@@ -822,14 +824,14 @@ function renderManagerView(data) {
       return `
         <div class="workload-item">
           <div>
-            <b style="font-size:14px;">${w.team}</b>
+            <b style="font-size:13px;color:var(--text-primary);">${w.team}</b>
             <small style="display:block;color:var(--text-muted);font-size:11px;">${w.active_tasks} active tasks</small>
           </div>
           <div class="meter-track">
             <div class="meter-fill ${fillClass}" style="width:${w.capacity_pct}%"></div>
           </div>
           <div style="text-align:right;">
-            <b style="font-size:13px;">${w.capacity_pct}%</b>
+            <b style="font-size:13px;color:var(--text-primary);">${w.capacity_pct}%</b>
             <small style="display:block;font-size:11px;color:var(--text-muted)">${w.load_level}</small>
           </div>
         </div>
@@ -846,20 +848,20 @@ function renderManagerView(data) {
       return `
         <tr>
           <td>
-            <b style="display:block;font-size:13px;">${task.title}</b>
+            <b style="display:block;font-size:13px;color:var(--text-primary);">${task.title}</b>
             <small style="color:var(--text-muted)">Project: ${task.project}</small>
           </td>
           <td><span class="${pClass}">${task.priority}</span></td>
           <td>
-            <span style="color:var(--red-text);font-weight:700;">${task.due_date}</span>
-            <small style="display:block;color:var(--red-text);font-size:11px;">${task.days_overdue} days late</small>
+            <span style="color:var(--danger);font-weight:700;">${task.due_date}</span>
+            <small style="display:block;color:var(--danger);font-size:11px;">${task.days_overdue} days late</small>
           </td>
           <td>
-            <b>${task.assignee_name}</b>
+            <b style="color:var(--text-primary);">${task.assignee_name}</b>
             <small style="display:block;color:var(--text-muted);font-size:11px;">${task.assignee_team}</small>
           </td>
           <td>
-            <button class="btn btn-light" style="padding:4px 8px;font-size:11px;" onclick="pingAssignee('${task.assignee_name}', '${task.title}')">
+            <button class="btn btn-light" style="padding:4px 10px;font-size:11px;" onclick="pingAssignee('${task.assignee_name}', '${task.title}')">
               🔔 Ping
             </button>
           </td>
@@ -876,11 +878,11 @@ function renderManagerView(data) {
       return `
         <tr>
           <td>
-            <b>${task.title}</b>
+            <b style="color:var(--text-primary);">${task.title}</b>
             <small style="display:block;color:var(--text-muted)">${task.project}</small>
           </td>
           <td>
-            <span class="badge-tag" style="background:${isDone ? 'var(--green)' : 'var(--yellow)'};color:${isDone ? 'var(--green-text)' : 'var(--yellow-text)'};font-weight:700;">
+            <span class="badge-tag" style="background:${isDone ? 'var(--success-bg)' : 'var(--warning-bg)'};color:${isDone ? 'var(--success-text)' : 'var(--warning-text)'};font-weight:700;">
               ${task.status}
             </span>
           </td>
