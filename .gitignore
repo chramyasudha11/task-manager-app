@@ -1,6 +1,21 @@
 __pycache__/
 *.py[cod]
+ feature/member5-login-page
 users.db
 users.db-*
 .venv/
 venv/
+
+feature/dashboard-reports
+users.db
+.env
+venv/
+.venv/
+setup_test_tasks.py
+*.db
+.env
+.venv/
+venv/
+auth_backup.py
+ main
+ main
