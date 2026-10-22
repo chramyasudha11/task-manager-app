@@ -11,7 +11,7 @@ let currentPage = 1;
 const pageSize = 10;
 let sortField = "assigned";
 let sortAsc = false;
-let currentTab = "admin"; // 'admin', 'manager', 'employees'
+let currentTab = "all"; // 'all', 'charts', 'manager', 'employees'
 
 // Document Ready
 document.addEventListener("DOMContentLoaded", async () => {
@@ -132,19 +132,25 @@ function switchTab(tab) {
   const mgrSec = document.getElementById("manager-view-section");
   const empSec = document.getElementById("employee-table-section");
 
-  if (tab === "admin") {
+  if (tab === "all") {
+    if (adminSec) adminSec.style.display = "flex";
+    if (mgrSec) mgrSec.style.display = "flex";
+    if (empSec) empSec.style.display = "block";
+  } else if (tab === "charts" || tab === "admin") {
     if (adminSec) adminSec.style.display = "flex";
     if (mgrSec) mgrSec.style.display = "none";
-    if (empSec) empSec.style.display = "block";
+    if (empSec) empSec.style.display = "none";
+    adminSec?.scrollIntoView({ behavior: "smooth" });
   } else if (tab === "manager") {
     if (adminSec) adminSec.style.display = "none";
     if (mgrSec) mgrSec.style.display = "flex";
     if (empSec) empSec.style.display = "none";
+    mgrSec?.scrollIntoView({ behavior: "smooth" });
   } else if (tab === "employees") {
     if (adminSec) adminSec.style.display = "none";
     if (mgrSec) mgrSec.style.display = "none";
     if (empSec) empSec.style.display = "block";
-    empSec.scrollIntoView({ behavior: "smooth" });
+    empSec?.scrollIntoView({ behavior: "smooth" });
   }
 }
 
