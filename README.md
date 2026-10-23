@@ -47,9 +47,10 @@ The app provides these endpoints:
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/signup` | Accepts JSON `{ "name", "email", "password", "accountType" }`; admin signup requires an address in `ADMIN_EMAILS` or the legacy `ADMIN_EMAIL`, while all other signups create employees. |
-| `POST` | `/api/login` | Accepts JSON `{ "email", "password" }`; returns the authenticated user, directly or under a `user` property. |
+| `POST` | `/api/login` | Accepts JSON `{ "email", "password" }`; returns the authenticated user, directly or under a `user` property. Enforces rate limiting (5 failed attempts per 15-minute window returns `429 Too Many Requests`). |
 | `GET` | `/api/me` | Returns the current user, directly or under a `user` property; returns `401` if signed out. |
 | `POST` | `/api/logout` | Clears the session. |
+| `POST`, `PATCH`, `PUT` | `/api/account/password` | Updates the authenticated user's password; verifies current password and validates new password length and confirmation. |
 | `GET` | `/api/admin/dashboard` | Checks admin access. |
 | `GET` | `/api/manager/dashboard` | Checks manager/admin access. |
 | `GET` | `/api/employee/dashboard` | Checks authenticated access. |

@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from flask import Blueprint, g, jsonify, request
 
 from auth import configured_admin_emails, get_db, login_required, roles_required
+from audit import _employee_name, log_task_modifications, record_activity, record_audit_log
 
 
 management_bp = Blueprint("management", __name__, url_prefix="/api")
@@ -452,15 +453,49 @@ def _insert_or_update(table, record_id, columns, values):
 
 def _save_employee(data, record_id=None):
     database = get_db()
-    name = _text(data, "name", "Name", required=True, limit=120)
-    email = _text(data, "email", "Email", required=True, limit=254).lower()
-    if not EMAIL_PATTERN.fullmatch(email):
-        raise ValueError("Please enter a valid email address.")
-    department = _text(data, "department", "Department", required=True, limit=100)
-    title = _text(data, "title", "Job title", required=True, limit=120)
-    role = _choice(data, "role", ROLES, "EMPLOYEE", "employee role")
-    status = _choice(data, "status", EMPLOYEE_STATUSES, "Active", "employee status")
-    start_date = _date(data, "startDate", "Start date")
+    existing = None
+    if record_id is not None:
+        existing = database.execute("SELECT * FROM employees WHERE id = ?", (record_id,)).fetchone()
+        if existing is None:
+            return None
+
+    if "name" in data or existing is None:
+        name = _text(data, "name", "Name", required=True, limit=120)
+    else:
+        name = existing["name"]
+
+    if "email" in data or existing is None:
+        email = _text(data, "email", "Email", required=True, limit=254).lower()
+        if not EMAIL_PATTERN.fullmatch(email):
+            raise ValueError("Please enter a valid email address.")
+    else:
+        email = existing["email"]
+
+    if "department" in data or existing is None:
+        department = _text(data, "department", "Department", required=True, limit=100)
+    else:
+        department = existing["department"]
+
+    if "title" in data or existing is None:
+        title = _text(data, "title", "Job title", required=True, limit=120)
+    else:
+        title = existing["title"]
+
+    if "role" in data or existing is None:
+        role = _choice(data, "role", ROLES, "EMPLOYEE", "employee role")
+    else:
+        role = existing["role"]
+
+    if "status" in data or existing is None:
+        status = _choice(data, "status", EMPLOYEE_STATUSES, "Active", "employee status")
+    else:
+        status = existing["status"]
+
+    if "startDate" in data or existing is None:
+        start_date = _date(data, "startDate", "Start date")
+    else:
+        start_date = existing["start_date"]
+
     values = (name, email, department, title, role, status, start_date)
     columns = ("name", "email", "department", "title", "role", "status", "start_date")
     if record_id is None:
@@ -487,56 +522,124 @@ def _save_employee(data, record_id=None):
 
 def _save_team(data, record_id=None):
     database = get_db()
-    name = _text(data, "name", "Team name", required=True, limit=100)
-    description = _text(data, "description", "Description", limit=1000)
-    manager_id = _optional_id(data, "managerId", "Manager")
+    existing = None
+    if record_id is not None:
+        existing = database.execute("SELECT * FROM teams WHERE id = ?", (record_id,)).fetchone()
+        if existing is None:
+            return None
+
+    if "name" in data or existing is None:
+        name = _text(data, "name", "Team name", required=True, limit=100)
+    else:
+        name = existing["name"]
+
+    if "description" in data or existing is None:
+        description = _text(data, "description", "Description", limit=1000)
+    else:
+        description = existing["description"]
+
+    if "managerId" in data or existing is None:
+        manager_id = _optional_id(data, "managerId", "Manager")
+    else:
+        manager_id = existing["manager_id"]
     _validate_reference(database, "employees", manager_id, "Manager")
-    member_ids = data.get("memberIds", [])
-    if not isinstance(member_ids, list):
-        raise ValueError("Team members must be a list.")
-    try:
-        member_ids = sorted(set(int(value) for value in member_ids))
-    except (TypeError, ValueError) as error:
-        raise ValueError("One or more team members are invalid.") from error
-    for employee_id in member_ids:
-        _validate_reference(database, "employees", employee_id, "Team member")
+
+    if "memberIds" in data or existing is None:
+        member_ids = data.get("memberIds", [])
+        if not isinstance(member_ids, list):
+            raise ValueError("Team members must be a list.")
+        try:
+            member_ids = sorted(set(int(value) for value in member_ids))
+        except (TypeError, ValueError) as error:
+            raise ValueError("One or more team members are invalid.") from error
+        for employee_id in member_ids:
+            _validate_reference(database, "employees", employee_id, "Team member")
+    else:
+        member_ids = [
+            row["employee_id"]
+            for row in database.execute(
+                "SELECT employee_id FROM team_members WHERE team_id = ?", (record_id,)
+            )
+        ]
+
     team_id = _insert_or_update(
         "teams", record_id, ("name", "description", "manager_id"), (name, description, manager_id)
     )
     if team_id is None:
         return None
-    database.execute("DELETE FROM team_members WHERE team_id = ?", (team_id,))
-    database.executemany(
-        "INSERT INTO team_members (team_id, employee_id) VALUES (?, ?)",
-        [(team_id, employee_id) for employee_id in member_ids],
-    )
-    database.commit()
+    if "memberIds" in data or record_id is None:
+        database.execute("DELETE FROM team_members WHERE team_id = ?", (team_id,))
+        database.executemany(
+            "INSERT INTO team_members (team_id, employee_id) VALUES (?, ?)",
+            [(team_id, employee_id) for employee_id in member_ids],
+        )
+        database.commit()
     return team_id
 
 
 def _save_project(data, record_id=None):
     database = get_db()
-    name = _text(data, "name", "Project name", required=True, limit=120)
-    description = _text(data, "description", "Description", limit=2000)
-    team_id = _optional_id(data, "teamId", "Team")
-    manager_id = _optional_id(data, "managerId", "Project manager")
+    existing = None
+    if record_id is not None:
+        existing = database.execute("SELECT * FROM projects WHERE id = ?", (record_id,)).fetchone()
+        if existing is None:
+            return None
+
+    if "name" in data or existing is None:
+        name = _text(data, "name", "Project name", required=True, limit=120)
+    else:
+        name = existing["name"]
+
+    if "description" in data or existing is None:
+        description = _text(data, "description", "Description", limit=2000)
+    else:
+        description = existing["description"]
+
+    if "teamId" in data or existing is None:
+        team_id = _optional_id(data, "teamId", "Team")
+    else:
+        team_id = existing["team_id"]
+
+    if "managerId" in data or existing is None:
+        manager_id = _optional_id(data, "managerId", "Project manager")
+    else:
+        manager_id = existing["manager_id"]
+
     _validate_reference(database, "teams", team_id, "Team")
     _validate_reference(database, "employees", manager_id, "Project manager")
-    start_date = _date(data, "startDate", "Start date")
-    due_date = _date(data, "dueDate", "Due date")
+
+    if "startDate" in data or existing is None:
+        start_date = _date(data, "startDate", "Start date")
+    else:
+        start_date = existing["start_date"]
+
+    if "dueDate" in data or existing is None:
+        due_date = _date(data, "dueDate", "Due date")
+    else:
+        due_date = existing["due_date"]
+
     _date_range(start_date, due_date)
-    status = _choice(data, "status", PROJECT_STATUSES, "In Progress", "project status")
-    raw_progress = data.get("progress", 0)
-    if isinstance(raw_progress, bool) or (
-        isinstance(raw_progress, float) and not raw_progress.is_integer()
-    ):
-        raise ValueError("Project completion must be a number between 0 and 100.")
-    try:
-        progress = int(raw_progress)
-    except (TypeError, ValueError) as error:
-        raise ValueError("Project completion must be a number between 0 and 100.") from error
-    if not 0 <= progress <= 100:
-        raise ValueError("Project completion must be between 0 and 100.")
+
+    if "status" in data or existing is None:
+        status = _choice(data, "status", PROJECT_STATUSES, "In Progress", "project status")
+    else:
+        status = existing["status"]
+
+    if "progress" in data or existing is None:
+        raw_progress = data.get("progress", 0)
+        if isinstance(raw_progress, bool) or (
+            isinstance(raw_progress, float) and not raw_progress.is_integer()
+        ):
+            raise ValueError("Project completion must be a number between 0 and 100.")
+        try:
+            progress = int(raw_progress)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Project completion must be a number between 0 and 100.") from error
+        if not 0 <= progress <= 100:
+            raise ValueError("Project completion must be between 0 and 100.")
+    else:
+        progress = existing["progress"]
+
     return _insert_or_update(
         "projects",
         record_id,
@@ -787,6 +890,32 @@ def delete_team(record_id):
     return jsonify(message="Team deleted.")
 
 
+@management_bp.patch("/teams/<int:record_id>/members")
+@roles_required("ADMIN")
+def update_team_members(record_id):
+    data, error = _required_record(_json_object())
+    if error:
+        return error
+    if "memberIds" not in data or not isinstance(data.get("memberIds"), list):
+        return jsonify(error="Team members must be a list."), 400
+    try:
+        member_ids = sorted(set(int(val) for val in data["memberIds"]))
+    except (TypeError, ValueError):
+        return jsonify(error="One or more team members are invalid."), 400
+    database = get_db()
+    if database.execute("SELECT 1 FROM teams WHERE id = ?", (record_id,)).fetchone() is None:
+        return _not_found("team")
+    for emp_id in member_ids:
+        _validate_reference(database, "employees", emp_id, "Team member")
+    database.execute("DELETE FROM team_members WHERE team_id = ?", (record_id,))
+    database.executemany(
+        "INSERT INTO team_members (team_id, employee_id) VALUES (?, ?)",
+        [(record_id, emp_id) for emp_id in member_ids],
+    )
+    database.commit()
+    return jsonify(team=next(team for team in _teams() if team["id"] == record_id))
+
+
 @management_bp.get("/projects")
 @roles_required("ADMIN")
 def list_projects():
@@ -833,6 +962,33 @@ def delete_project(record_id):
     return jsonify(message="Project deleted.")
 
 
+@management_bp.patch("/projects/<int:record_id>/progress")
+@roles_required("ADMIN")
+def update_project_progress(record_id):
+    data, error = _required_record(_json_object())
+    if error:
+        return error
+    if "progress" not in data:
+        return jsonify(error="Project completion progress is required."), 400
+    raw_progress = data.get("progress")
+    if isinstance(raw_progress, bool) or (
+        isinstance(raw_progress, float) and not raw_progress.is_integer()
+    ):
+        return jsonify(error="Project completion must be a number between 0 and 100."), 400
+    try:
+        progress = int(raw_progress)
+    except (TypeError, ValueError):
+        return jsonify(error="Project completion must be a number between 0 and 100."), 400
+    if not 0 <= progress <= 100:
+        return jsonify(error="Project completion must be between 0 and 100."), 400
+    database = get_db()
+    cursor = database.execute("UPDATE projects SET progress = ? WHERE id = ?", (progress, record_id))
+    if cursor.rowcount == 0:
+        return _not_found("project")
+    database.commit()
+    return jsonify(project=next(item for item in _projects() if item["id"] == record_id))
+
+
 @management_bp.get("/tasks")
 @login_required
 def list_tasks():
@@ -854,6 +1010,21 @@ def create_task():
         task_id = _save_task(data)
     except ValueError as error:
         return jsonify(error=str(error)), 400
+
+    database = get_db()
+    task_row = database.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if task_row:
+        user_id = g.current_user["id"]
+        record_activity(database, task_id, user_id, "created", f"Task '{task_row['name']}' created")
+        if task_row["status"]:
+            record_audit_log(database, task_id, user_id, "status", None, task_row["status"], f"Initial status set to '{task_row['status']}'")
+        if task_row["priority"]:
+            record_audit_log(database, task_id, user_id, "priority", None, task_row["priority"], f"Initial priority set to '{task_row['priority']}'")
+        if task_row["assignee_id"]:
+            emp_name = _employee_name(database, task_row["assignee_id"])
+            record_audit_log(database, task_id, user_id, "assignment", None, emp_name, f"Initially assigned to {emp_name}")
+        database.commit()
+
     return jsonify(task=next(task for task in _tasks() if task["id"] == task_id)), 201
 
 
@@ -937,12 +1108,18 @@ def update_task(record_id):
     data, error = _required_record(_json_object())
     if error:
         return error
+    database = get_db()
+    old_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+    if old_task is None:
+        return _not_found("task")
+
     if g.current_user["role"] == "EMPLOYEE":
         raw_status = data.get("status")
         if raw_status == "To Do":
             raw_status = "Not Started"
         if set(data) != {"status"} or not isinstance(raw_status, str) or raw_status not in TASK_STATUSES:
             return jsonify(error="Employees may only update task status."), 403
+
         data["status"] = raw_status
         database = get_db()
         employee = database.execute(
@@ -954,14 +1131,26 @@ def update_task(record_id):
         if task is None:
             return _not_found("task")
         if employee is None or task["assignee_id"] != employee["id"]:
+
+        employee = database.execute(
+            "SELECT id FROM employees WHERE user_id = ?", (g.current_user["id"],)
+        ).fetchone()
+        if employee is None or old_task["assignee_id"] != employee["id"]:
+
             return jsonify(error="You can only update tasks assigned to you."), 403
         old_status = task["status"]
         database.execute("UPDATE tasks SET status = ? WHERE id = ?", (data["status"], record_id))
         database.commit()
+
         if old_status != data["status"]:
             _log_activity(database, record_id, "status_changed", f"Status changed from {old_status} to {data['status']}")
             if data["status"] == "Completed":
                 _handle_task_recurrence(database, task)
+
+        new_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+        log_task_modifications(database, record_id, g.current_user["id"], old_task, new_task)
+        database.commit()
+
     elif g.current_user["role"] == "ADMIN":
         database = get_db()
         task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
@@ -976,11 +1165,17 @@ def update_task(record_id):
             return jsonify(error=str(error)), 400
         if task_id is None:
             return _not_found("task")
+
         new_status = data.get("status", old_status)
         if old_status != new_status:
             _log_activity(database, record_id, "status_changed", f"Status changed from {old_status} to {new_status}")
             if new_status == "Completed":
                 _handle_task_recurrence(database, task)
+
+        new_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+        log_task_modifications(database, record_id, g.current_user["id"], old_task, new_task)
+        database.commit()
+
     else:
         return jsonify(error="You do not have permission to update tasks."), 403
     return jsonify(task=next(item for item in _tasks() if item["id"] == record_id))
