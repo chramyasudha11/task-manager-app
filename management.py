@@ -5,6 +5,7 @@ from datetime import date
 from flask import Blueprint, g, jsonify, request
 
 from auth import configured_admin_emails, get_db, login_required, roles_required
+from audit import _employee_name, log_task_modifications, record_activity, record_audit_log
 
 
 management_bp = Blueprint("management", __name__, url_prefix="/api")
@@ -765,6 +766,21 @@ def create_task():
         task_id = _save_task(data)
     except ValueError as error:
         return jsonify(error=str(error)), 400
+
+    database = get_db()
+    task_row = database.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if task_row:
+        user_id = g.current_user["id"]
+        record_activity(database, task_id, user_id, "created", f"Task '{task_row['name']}' created")
+        if task_row["status"]:
+            record_audit_log(database, task_id, user_id, "status", None, task_row["status"], f"Initial status set to '{task_row['status']}'")
+        if task_row["priority"]:
+            record_audit_log(database, task_id, user_id, "priority", None, task_row["priority"], f"Initial priority set to '{task_row['priority']}'")
+        if task_row["assignee_id"]:
+            emp_name = _employee_name(database, task_row["assignee_id"])
+            record_audit_log(database, task_id, user_id, "assignment", None, emp_name, f"Initially assigned to {emp_name}")
+        database.commit()
+
     return jsonify(task=next(task for task in _tasks() if task["id"] == task_id)), 201
 
 
@@ -774,21 +790,23 @@ def update_task(record_id):
     data, error = _required_record(_json_object())
     if error:
         return error
+    database = get_db()
+    old_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+    if old_task is None:
+        return _not_found("task")
+
     if g.current_user["role"] == "EMPLOYEE":
         if set(data) != {"status"} or not isinstance(data.get("status"), str) or data["status"] not in TASK_STATUSES:
             return jsonify(error="Employees may only update task status."), 403
-        database = get_db()
         employee = database.execute(
             "SELECT id FROM employees WHERE user_id = ?", (g.current_user["id"],)
         ).fetchone()
-        task = database.execute(
-            "SELECT assignee_id FROM tasks WHERE id = ?", (record_id,)
-        ).fetchone()
-        if task is None:
-            return _not_found("task")
-        if employee is None or task["assignee_id"] != employee["id"]:
+        if employee is None or old_task["assignee_id"] != employee["id"]:
             return jsonify(error="You can only update tasks assigned to you."), 403
         database.execute("UPDATE tasks SET status = ? WHERE id = ?", (data["status"], record_id))
+        database.commit()
+        new_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+        log_task_modifications(database, record_id, g.current_user["id"], old_task, new_task)
         database.commit()
     elif g.current_user["role"] == "ADMIN":
         try:
@@ -797,6 +815,9 @@ def update_task(record_id):
             return jsonify(error=str(error)), 400
         if task_id is None:
             return _not_found("task")
+        new_task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
+        log_task_modifications(database, record_id, g.current_user["id"], old_task, new_task)
+        database.commit()
     else:
         return jsonify(error="You do not have permission to update tasks."), 403
     return jsonify(task=next(item for item in _tasks() if item["id"] == record_id))

@@ -22,6 +22,10 @@ const state = {
   selectedMemberIds: new Set(),
   assignmentSearch: "",
   assignmentDeptFilter: "All",
+  taskComments: [],
+  taskAuditLogs: [],
+  taskActivities: [],
+  taskDetailTab: "comments",
 };
 
 const workspaceData = { employees: [], teams: [], projects: [], tasks: [] };
@@ -334,10 +338,15 @@ function rowMarkup(cells, searchText) {
   return `<tr data-search-text="${escapeHtml(searchText.toLowerCase())}">${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
 }
 
-function openModal(entity, id = null, view = false) {
+async function openModal(entity, id = null, view = false) {
   state.modal = { entity, id: id === null ? null : Number(id), view };
+  if (entity === "task" && view && id !== null) {
+    state.taskDetailTab = state.taskDetailTab || "comments";
+    render();
+    await loadTaskDetails(Number(id));
+  }
   render();
-  document.querySelector(".modal-card input:not([type=checkbox]), .modal-card select")?.focus();
+  document.querySelector(".modal-card input:not([type=checkbox]), .modal-card select, .modal-card textarea")?.focus();
 }
 
 function openTeamAssignmentModal(teamId) {
@@ -389,6 +398,7 @@ function menuMarkup(activePage) {
           <strong>${escapeHtml(state.user.name)}</strong>
           <span>${escapeHtml(state.user.role.toLowerCase())}</span>
         </div>
+        <button class="logout-icon" type="button" data-action="open-password-modal" aria-label="Change password" title="Change password">🔑</button>
         <button class="logout-icon" type="button" data-action="logout" aria-label="Sign out" title="Sign out">↪</button>
       </div>
     </aside>`;
@@ -977,7 +987,7 @@ function featurePageMarkup(key) {
         <strong>${Number(project.progress)}%</strong>
         ${canEdit ? `<button class="quick-edit-btn" type="button" data-action="quick-edit-progress" data-id="${project.id}" title="Edit completion progress" aria-label="Edit progress for ${escapeHtml(project.name)}">✎</button>` : ""}
       </div>`,
-      `<span class="status-badge ${project.status === "On Track" ? "status-good" : project.status === "At Risk" ? "status-warn" : project.status === "Completed" ? "status-good" : ""}">${escapeHtml(project.status)}</span>`,
+      `<span class="status-badge ${project.status === "On Track" || project.status === "Completed" ? "status-good" : project.status === "At Risk" ? "status-warn" : ""}">${escapeHtml(project.status)}</span>`,
       `<div class="row-actions">
         <button class="table-action button-primary-quiet" type="button" data-action="view-project-page" data-id="${project.id}">View Details</button>
         ${canEdit ? actionButton("edit-project", project.id, "Edit") : ""}
@@ -1025,6 +1035,9 @@ function featurePageMarkup(key) {
       </section>
     `;
   }
+
+  
+
 
   // === TASKS PAGE ===
   const q = state.search.trim().toLowerCase();
@@ -1325,7 +1338,101 @@ function detailModalContent(entity, record) {
       </div>
     `;
   }
+ feature/member4-management-ui
 
+
+  if (entity === "task") {
+    const comments = state.taskComments || [];
+    const auditLogs = state.taskAuditLogs || [];
+    const activities = state.taskActivities || [];
+    return `
+      <div class="detail-grid">
+        <div><span>Task</span><strong>${escapeHtml(record.name)}</strong></div>
+        <div><span>Project</span><strong>${escapeHtml(record.projectName || labelForProject(record.projectId))}</strong></div>
+        <div><span>Assignee</span><strong>${escapeHtml(labelForEmployee(record.assigneeId))}</strong></div>
+        <div><span>Priority</span><strong class="priority-${escapeHtml((record.priority || "").toLowerCase())}">${escapeHtml(record.priority || "Medium")}</strong></div>
+        <div><span>Status</span><strong>${escapeHtml(record.status || "Not Started")}</strong></div>
+        <div><span>Due date</span><strong>${escapeHtml(record.dueDate || "Not set")}</strong></div>
+      </div>
+
+      <div class="task-tabs">
+        <button type="button" class="tab-button ${state.taskDetailTab === "comments" ? "is-active" : ""}" data-action="set-task-tab" data-tab="comments">Discussion (${comments.length})</button>
+        <button type="button" class="tab-button ${state.taskDetailTab === "audit" ? "is-active" : ""}" data-action="set-task-tab" data-tab="audit">Audit Logs (${auditLogs.length})</button>
+        <button type="button" class="tab-button ${state.taskDetailTab === "history" ? "is-active" : ""}" data-action="set-task-tab" data-tab="history">Activity History (${activities.length})</button>
+      </div>
+
+      <div class="task-tab-content">
+        ${state.taskDetailTab === "comments" ? `
+          <div class="comments-section">
+            <ul class="comments-list">
+              ${comments.length ? comments.map((c) => `
+                <li class="comment-item">
+                  <div class="comment-header">
+                    <span class="avatar">${escapeHtml(getInitials(c.userName))}</span>
+                    <div>
+                      <strong>${escapeHtml(c.userName)}</strong>
+                      <small class="muted-copy">${escapeHtml(c.createdAt)}</small>
+                    </div>
+                    ${(c.userId === state.user.id || state.user.role === "ADMIN") ? `
+                      <button type="button" class="table-action button-danger" data-action="delete-comment" data-task-id="${record.id}" data-comment-id="${c.id}">Delete</button>
+                    ` : ""}
+                  </div>
+                  <p class="comment-body">${escapeHtml(c.content)}</p>
+                </li>
+              `).join("") : `<p class="muted-copy">No comments yet. Start the discussion below.</p>`}
+            </ul>
+            <form id="add-comment-form" class="comment-form" data-task-id="${record.id}">
+              <textarea id="comment-content" name="content" rows="2" placeholder="Write a comment or discussion update…" required maxlength="2000"></textarea>
+              <button class="button button-primary" type="submit">Post comment</button>
+            </form>
+          </div>
+        ` : state.taskDetailTab === "audit" ? `
+          <div class="audit-section">
+            ${auditLogs.length ? `
+              <ul class="timeline-list">
+                ${auditLogs.map((l) => `
+                  <li class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                      <div class="timeline-header">
+                        <span class="badge-change badge-${escapeHtml(l.changeType)}">${escapeHtml(l.changeType.toUpperCase())}</span>
+                        <small class="muted-copy">${escapeHtml(l.createdAt)}</small>
+                      </div>
+                      <p class="timeline-text">
+                        <strong>${escapeHtml(l.oldValue || "None")}</strong> → <strong>${escapeHtml(l.newValue || "None")}</strong>
+                      </p>
+                      <small class="muted-copy">Changed by ${escapeHtml(l.userName)}</small>
+                    </div>
+                  </li>
+                `).join("")}
+              </ul>
+            ` : `<p class="muted-copy">No audit logs recorded for this task yet.</p>`}
+          </div>
+        ` : `
+          <div class="history-section">
+            ${activities.length ? `
+              <ul class="timeline-list">
+                ${activities.map((a) => `
+                  <li class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                      <div class="timeline-header">
+                        <strong>${escapeHtml(a.action.replace(/_/g, " "))}</strong>
+                        <small class="muted-copy">${escapeHtml(a.createdAt)}</small>
+                      </div>
+                      <p class="timeline-text">${escapeHtml(a.details)}</p>
+                      <small class="muted-copy">By ${escapeHtml(a.userName)}</small>
+                    </div>
+                  </li>
+                `).join("")}
+              </ul>
+            ` : `<p class="muted-copy">No activity recorded for this task yet.</p>`}
+          </div>
+        `}
+      </div>
+    `;
+  }
+ main
   return "";
 }
 
@@ -1476,6 +1583,33 @@ function modalMarkup() {
   }
 
   const { entity, id, view } = state.modal;
+  if (entity === "password") {
+    return `<div class="modal-backdrop" data-action="backdrop-close">
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+      <header class="modal-header"><div><span class="eyebrow">SECURITY</span><h2 id="password-modal-title">Change Password</h2></div><button class="modal-close" type="button" data-action="close-modal" aria-label="Close dialog">×</button></header>
+      <form id="password-form">
+        <div class="modal-content">
+          <div id="password-form-message"></div>
+          <div class="form-grid">
+            <div class="form-field form-field-full">
+              <label for="modal-currentPassword">Current password</label>
+              <input id="modal-currentPassword" name="currentPassword" type="password" autocomplete="current-password" placeholder="Enter current password" required>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="modal-newPassword">New password</label>
+              <input id="modal-newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="modal-confirmPassword">Confirm new password</label>
+              <input id="modal-confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Re-enter new password" required>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-footer"><button class="button button-quiet" type="button" data-action="close-modal">Cancel</button><button class="button button-primary" type="submit">Update password</button></footer>
+      </form>
+    </section>
+  </div>`;
+  }
   const pluralKey = `${entity}s`;
   const record = id === null ? {} : workspaceData[pluralKey]?.find((item) => item.id === id);
   const titleNames = { employee: "employee", team: "team", project: "project", task: "task" };
@@ -1532,6 +1666,7 @@ function mainContentMarkup() {
           </div>
           <div class="topbar-right">
             <span class="welcome">Signed in as ${escapeHtml(state.user.name)}</span>
+            <button class="button button-quiet" type="button" data-action="open-password-modal" style="font-size:12px;padding:4px 10px;">Change password</button>
             <span class="avatar" aria-hidden="true">${escapeHtml(getInitials(state.user.name))}</span>
           </div>
         </header>
@@ -1731,6 +1866,7 @@ async function saveAssignedTaskStatus(taskId) {
   }
 }
 
+ feature/member4-management-ui
 async function saveProjectProgress(projectId, progressValue) {
   const parsed = Number(progressValue);
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
@@ -1764,6 +1900,54 @@ async function saveTeamAssignments(teamId) {
     showToast(`Team members updated (${memberIds.length} members assigned).`, "success");
   } catch (error) {
     showToast(error.message || "Could not update team members.", "error");
+
+async function handlePasswordSubmit(form) {
+  const formData = new FormData(form);
+  const currentPassword = String(formData.get("currentPassword") || "");
+  const newPassword = String(formData.get("newPassword") || "");
+  const confirmPassword = String(formData.get("confirmPassword") || "");
+
+  const msgBox = form.querySelector("#password-form-message");
+  if (msgBox) msgBox.innerHTML = "";
+
+  if (!currentPassword || !newPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">Current password and new password are required.</div>';
+    return;
+  }
+  if (newPassword.length < 8) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">Password must contain at least 8 characters.</div>';
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">New passwords do not match.</div>';
+    return;
+  }
+  if (currentPassword === newPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">New password cannot be the same as the current password.</div>';
+    return;
+  }
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = "Updating...";
+
+  try {
+    const res = await apiRequest("/api/account/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+    });
+    state.modal = null;
+    render();
+    showToast(res.message || "Password updated successfully.", "success");
+  } catch (error) {
+    if (msgBox) {
+      msgBox.innerHTML = `<div class="form-message error">${escapeHtml(error.message || "Failed to update password.")}</div>`;
+    } else {
+      showToast(error.message || "Failed to update password.", "error");
+    }
+    submitButton.disabled = false;
+    submitButton.textContent = "Update password";
+main
   }
 }
 
@@ -1945,13 +2129,75 @@ async function restoreSession() {
   }
 }
 
+ 
 // === GLOBAL EVENT LISTENERS ===
+
+
+async function loadTaskDetails(taskId) {
+  try {
+    const [commentsRes, auditRes, historyRes] = await Promise.allSettled([
+      apiRequest(`/api/tasks/${taskId}/comments`),
+      apiRequest(`/api/tasks/${taskId}/audit-logs`),
+      apiRequest(`/api/tasks/${taskId}/history`),
+    ]);
+    state.taskComments = commentsRes.status === "fulfilled" ? (commentsRes.value.comments || []) : [];
+    state.taskAuditLogs = auditRes.status === "fulfilled" ? (auditRes.value.auditLogs || []) : [];
+    state.taskActivities = historyRes.status === "fulfilled" ? (historyRes.value.activities || []) : [];
+  } catch {
+    state.taskComments = [];
+    state.taskAuditLogs = [];
+    state.taskActivities = [];
+  }
+}
+
+async function handleCommentSubmit(form) {
+  const taskId = Number(form.dataset.taskId);
+  const textarea = form.querySelector('textarea[name="content"]');
+  const content = textarea?.value?.trim();
+  if (!content) return;
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    await apiRequest(`/api/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
+    textarea.value = "";
+    await loadTaskDetails(taskId);
+    render();
+    showToast("Comment posted.", "success");
+  } catch (error) {
+    if (submitButton) submitButton.disabled = false;
+    showToast(error.message || "Could not post comment.", "error");
+  }
+}
+
+async function deleteTaskComment(taskId, commentId) {
+  if (!window.confirm("Delete this comment?")) return;
+  try {
+    await apiRequest(`/api/tasks/${taskId}/comments/${commentId}`, {
+      method: "DELETE",
+    });
+    await loadTaskDetails(taskId);
+    render();
+    showToast("Comment deleted.", "success");
+  } catch (error) {
+    showToast(error.message || "Could not delete comment.", "error");
+  }
+}
+
 app.addEventListener("submit", (event) => {
   if (event.target.id === "auth-form") {
     handleAuthSubmit(event);
   } else if (event.target.id === "record-form") {
     event.preventDefault();
     saveRecord(event.target);
+  } else if (event.target.id === "add-comment-form") {
+    event.preventDefault();
+    handleCommentSubmit(event.target);
+  } else if (event.target.id === "password-form") {
+    event.preventDefault();
+    handlePasswordSubmit(event.target);
   }
 });
 
@@ -2006,12 +2252,23 @@ app.addEventListener("click", (event) => {
     logout();
   } else if (action === "save-task-status") {
     saveAssignedTaskStatus(actionButtonElement.dataset.id);
+  } else if (action === "set-task-tab") {
+    state.taskDetailTab = actionButtonElement.dataset.tab;
+    render();
+  } else if (action === "delete-comment") {
+    const taskId = Number(actionButtonElement.dataset.taskId);
+    const commentId = Number(actionButtonElement.dataset.commentId);
+    deleteTaskComment(taskId, commentId);
   } else if (action === "toggle-nav") {
     state.mobileNavOpen = !state.mobileNavOpen;
     render();
   } else if (action === "close-nav") {
     state.mobileNavOpen = false;
     render();
+  } else if (action === "open-password-modal") {
+    state.modal = { entity: "password" };
+    render();
+    document.getElementById("modal-currentPassword")?.focus();
   } else if (action === "create-record") {
     const entity = actionButtonElement.dataset.entity;
     if (canManage(entity)) openModal(entity);
@@ -2030,6 +2287,7 @@ app.addEventListener("click", (event) => {
   } else if (action === "backdrop-close" && event.target === actionButtonElement) {
     state.modal = null;
     render();
+
   } else if (action === "view-project-page") {
     event.preventDefault();
     const pid = Number(actionButtonElement.dataset.id);
@@ -2100,6 +2358,9 @@ app.addEventListener("click", (event) => {
   } else if (action === "save-team-assignment") {
     saveTeamAssignments(actionButtonElement.dataset.id);
   } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "edit-task", "complete-task", "delete-task"].includes(action)) {
+
+  } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "view-task", "edit-task", "complete-task", "delete-task"].includes(action)) {
+
     handleRecordAction(action, actionButtonElement.dataset.id);
   }
 });
