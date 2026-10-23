@@ -334,6 +334,96 @@ class ManagementApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_project_progress_update_endpoints(self):
+        self.promote_to_admin()
+        project = self.client.post(
+            "/api/projects",
+            json={"name": "Migration", "description": "System migration", "status": "In Progress", "progress": 15},
+        ).get_json()["project"]
+        project_id = project["id"]
+
+        # Dedicated progress endpoint
+        res = self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": 65})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()["project"]["progress"], 65)
+        self.assertEqual(res.get_json()["project"]["name"], "Migration")
+
+        # General project patch with partial payload
+        res2 = self.client.patch(f"/api/projects/{project_id}", json={"progress": 85})
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.get_json()["project"]["progress"], 85)
+        self.assertEqual(res2.get_json()["project"]["description"], "System migration")
+
+        # Boundary checks
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": 0}).status_code, 200)
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": 100}).status_code, 200)
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": -1}).status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": 101}).status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": "abc"}).status_code, 400)
+
+        # Non-admin access rejected
+        with closing(sqlite3.connect(self.database_path)) as database:
+            database.execute("UPDATE users SET role = 'EMPLOYEE' WHERE email = 'casey@example.test'")
+            database.execute("UPDATE employees SET role = 'EMPLOYEE' WHERE email = 'casey@example.test'")
+            database.commit()
+        self.assertEqual(self.client.patch(f"/api/projects/{project_id}/progress", json={"progress": 50}).status_code, 403)
+
+    def test_team_member_assignment_endpoints(self):
+        self.promote_to_admin()
+        emp1 = self.client.post(
+            "/api/employees",
+            json={"name": "Dev One", "email": "dev1@example.test", "department": "Eng", "title": "Dev"},
+        ).get_json()["employee"]
+        emp2 = self.client.post(
+            "/api/employees",
+            json={"name": "Dev Two", "email": "dev2@example.test", "department": "Eng", "title": "Dev"},
+        ).get_json()["employee"]
+
+        team = self.client.post(
+            "/api/teams",
+            json={"name": "Platform", "description": "Platform team", "memberIds": [emp1["id"]]},
+        ).get_json()["team"]
+        team_id = team["id"]
+        self.assertEqual(team["memberIds"], [emp1["id"]])
+
+        # Update members via dedicated endpoint
+        res = self.client.patch(f"/api/teams/{team_id}/members", json={"memberIds": [emp1["id"], emp2["id"]]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()["team"]["memberIds"], [emp1["id"], emp2["id"]])
+
+        # Remove member
+        res_del = self.client.patch(f"/api/teams/{team_id}/members", json={"memberIds": [emp2["id"]]})
+        self.assertEqual(res_del.status_code, 200)
+        self.assertEqual(res_del.get_json()["team"]["memberIds"], [emp2["id"]])
+
+        # Partial update on general teams endpoint
+        res_gen = self.client.patch(f"/api/teams/{team_id}", json={"memberIds": [emp1["id"]]})
+        self.assertEqual(res_gen.status_code, 200)
+        self.assertEqual(res_gen.get_json()["team"]["memberIds"], [emp1["id"]])
+
+    def test_employee_activation_deactivation_cycle(self):
+        self.promote_to_admin()
+        emp = self.client.post(
+            "/api/employees",
+            json={"name": "Temp Staff", "email": "temp@example.test", "department": "Ops", "title": "Specialist"},
+        ).get_json()["employee"]
+        emp_id = emp["id"]
+        self.assertEqual(emp["status"], "Active")
+
+        # Deactivate
+        deact = self.client.patch(f"/api/employees/{emp_id}/status", json={"status": "Inactive"})
+        self.assertEqual(deact.status_code, 200)
+        self.assertEqual(deact.get_json()["employee"]["status"], "Inactive")
+
+        # Reactivate
+        react = self.client.patch(f"/api/employees/{emp_id}/status", json={"status": "Active"})
+        self.assertEqual(react.status_code, 200)
+        self.assertEqual(react.get_json()["employee"]["status"], "Active")
+
+        # Reject invalid status
+        inv = self.client.patch(f"/api/employees/{emp_id}/status", json={"status": "Suspended"})
+        self.assertEqual(inv.status_code, 400)
+
     def test_management_endpoints_require_authentication(self):
         self.client.post("/api/logout")
         self.assertEqual(self.client.get("/api/workspace").status_code, 401)
