@@ -9,6 +9,8 @@ from flask import Flask, jsonify, request, send_from_directory
 from auth import auth_bp, init_db
 from management import init_management_db, management_bp
 
+from productivity import init_productivity_db, productivity_bp
+
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -80,9 +82,11 @@ def create_app(test_config=None):
 
     init_db(app)
     init_management_db(app)
+    init_productivity_db(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(management_bp)
+    app.register_blueprint(productivity_bp)
 
     @app.get("/")
     def home():
@@ -95,6 +99,14 @@ def create_app(test_config=None):
     @app.get("/app.js")
     def frontend_script():
         return send_from_directory(BASE_DIR, "app.js")
+
+    @app.get("/productivity_ui.js")
+    def productivity_script():
+        return send_from_directory(BASE_DIR, "productivity_ui.js")
+
+    @app.get("/productivity.css")
+    def productivity_styles():
+        return send_from_directory(BASE_DIR, "productivity.css")
 
     @app.get("/api")
     @app.get("/api/")
