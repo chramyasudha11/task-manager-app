@@ -1,0 +1,396 @@
+
+/* ==========================================================================
+   Member 7 – Employee Productivity & Notifications styles
+   Appended to styles.css; uses the same CSS custom properties as the app.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------
+   Productivity stats grid (6-column, smaller on mobile)
+   ------------------------------------------------------------------ */
+.prd-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .prd-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .prd-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Productivity card row
+   ------------------------------------------------------------------ */
+.prd-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .prd-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.prd-card {
+  padding: 20px;
+}
+
+/* ------------------------------------------------------------------
+   Donut chart (pure CSS / SVG)
+   ------------------------------------------------------------------ */
+.prd-rate-wrap {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 14px;
+}
+
+.prd-rate-circle {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
+}
+
+.prd-donut {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.prd-donut-bg {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 3.8;
+}
+
+.prd-donut-fill {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 3.8;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s ease;
+}
+
+.prd-rate-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.prd-rate-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.prd-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.prd-dot-done     { background: var(--green); }
+.prd-dot-progress { background: var(--brand); }
+.prd-dot-new      { background: var(--subtle); }
+
+/* ------------------------------------------------------------------
+   Priority bar chart
+   ------------------------------------------------------------------ */
+.prd-priority-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.prd-bar-row {
+  display: grid;
+  grid-template-columns: 64px 1fr 28px;
+  align-items: center;
+  gap: 10px;
+}
+
+.prd-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.prd-bar-track {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.prd-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.35s ease;
+}
+
+.prd-bar-fill.priority-high   { background: var(--red); }
+.prd-bar-fill.priority-medium { background: var(--amber); }
+.prd-bar-fill.priority-low    { background: var(--green); }
+
+.prd-bar-count {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+
+/* ------------------------------------------------------------------
+   Loading placeholder
+   ------------------------------------------------------------------ */
+.prd-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------
+   Calendar
+   ------------------------------------------------------------------ */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cal-month-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.cal-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.cal-head {
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cal-cell {
+  min-height: 76px;
+  padding: 6px 5px 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  font-size: 11px;
+}
+
+.cal-cell-empty {
+  background: var(--canvas);
+  border-color: transparent;
+}
+
+.cal-cell-today {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.cal-day-num {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cal-cell-today .cal-day-num {
+  color: var(--brand);
+}
+
+.cal-task-chip {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: white;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-task-chip.priority-high   { background: var(--red); }
+.cal-task-chip.priority-medium { background: var(--amber); }
+.cal-task-chip.priority-low    { background: var(--green); }
+.cal-task-chip.cal-more        { background: var(--subtle); }
+
+@media (max-width: 720px) {
+  .cal-cell { min-height: 54px; }
+  .cal-task-chip { display: none; }
+  .cal-task-chip:first-of-type { display: block; }
+}
+
+/* ------------------------------------------------------------------
+   Notifications
+   ------------------------------------------------------------------ */
+.notif-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-unread {
+  background: var(--brand-soft);
+  border-radius: 8px;
+  padding: 14px 12px;
+  margin: 0 -12px;
+}
+
+.notif-kind-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notif-body {
+  flex: 1;
+}
+
+.notif-msg {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.notif-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Notification badge in topbar / page heading */
+.notif-badge {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 99px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  place-items: center;
+  vertical-align: middle;
+}
+
+.notif-bell-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.notif-bell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 120ms;
+}
+
+.notif-bell-btn:hover {
+  background: var(--brand-soft);
+}
+
+.notif-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--red);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  place-items: center;
+}
+
+/* ------------------------------------------------------------------
+   Saved filters panel
+   ------------------------------------------------------------------ */
+.saved-filters-panel {
+  padding: 18px 22px;
+}
+
+.saved-filter-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-filter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 10px;
+}
+
+.saved-filter-item:last-child {
+  border-bottom: none;
+}
+
+/* Priority label colours (re-declare for bar label text) */
+.prd-bar-label.priority-high   { color: var(--red); }
+.prd-bar-label.priority-medium { color: var(--amber); }
+.prd-bar-label.priority-low    { color: var(--green); }
