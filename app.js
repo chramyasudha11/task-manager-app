@@ -14,6 +14,10 @@ const state = {
   modal: null,
   search: "",
   statusFilter: "All",
+  taskComments: [],
+  taskAuditLogs: [],
+  taskActivities: [],
+  taskDetailTab: "comments",
 };
 
 const workspaceData = { employees: [], teams: [], projects: [], tasks: [] };
@@ -322,10 +326,15 @@ function rowMarkup(cells, searchText) {
   return `<tr data-search-text="${escapeHtml(searchText.toLowerCase())}">${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
 }
 
-function openModal(entity, id = null, view = false) {
+async function openModal(entity, id = null, view = false) {
   state.modal = { entity, id: id === null ? null : Number(id), view };
+  if (entity === "task" && view && id !== null) {
+    state.taskDetailTab = state.taskDetailTab || "comments";
+    render();
+    await loadTaskDetails(Number(id));
+  }
   render();
-  document.querySelector(".modal-card input:not([type=checkbox]), .modal-card select")?.focus();
+  document.querySelector(".modal-card input:not([type=checkbox]), .modal-card select, .modal-card textarea")?.focus();
 }
 
 function menuMarkup(activePage) {
@@ -505,7 +514,7 @@ function featurePageMarkup(key) {
       escapeHtml(task.dueDate || "Not set"),
       `<span class="priority-${escapeHtml(task.priority.toLowerCase())}">${escapeHtml(task.priority)}</span>`,
       `${state.user.role === "EMPLOYEE" ? `<select class="task-status-select" aria-label="Status for ${escapeHtml(task.name)}" data-task-status="${task.id}">${["Not Started", "In Progress", "Completed"].map((status) => `<option ${task.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>` : `<span class="status-badge ${task.status === "Completed" ? "status-good" : ""}">${escapeHtml(task.status)}</span>`}`,
-      `<div class="row-actions">${state.user.role === "EMPLOYEE" ? `<button class="table-action" type="button" data-action="save-task-status" data-id="${task.id}">Save status</button>` : `${task.status !== "Completed" ? actionButton("complete-task", task.id, "Complete") : ""}${actionButton("edit-task", task.id, "Edit")}${actionButton("delete-task", task.id, "Delete", "danger")}`}</div>`,
+      `<div class="row-actions">${actionButton("view-task", task.id, "View")}${state.user.role === "EMPLOYEE" ? `<button class="table-action" type="button" data-action="save-task-status" data-id="${task.id}">Save status</button>` : `${task.status !== "Completed" ? actionButton("complete-task", task.id, "Complete") : ""}${actionButton("edit-task", task.id, "Edit")}${actionButton("delete-task", task.id, "Delete", "danger")}`}</div>`,
     ], `${task.name} ${task.projectName || labelForProject(task.projectId)} ${labelForEmployee(task.assigneeId)} ${task.priority} ${task.status}`));
   }
 
@@ -646,6 +655,97 @@ function detailModalContent(entity, record) {
       <p class="muted-copy">${members.length ? members.map((employee) => escapeHtml(employee.name)).join(", ") : "No team members assigned."}</p>
       <h3 class="modal-section-title">Project tasks</h3>
       ${projectTasks.length ? `<ul class="project-task-list">${projectTasks.map((task) => `<li><span class="task-dot ${task.status === "Completed" ? "is-done" : ""}"></span><span>${escapeHtml(task.name)}</span><small>${escapeHtml(task.status)}</small></li>`).join("")}</ul>` : `<p class="muted-copy">No tasks assigned to this project yet.</p>`}`;
+  }
+  if (entity === "task") {
+    const comments = state.taskComments || [];
+    const auditLogs = state.taskAuditLogs || [];
+    const activities = state.taskActivities || [];
+    return `
+      <div class="detail-grid">
+        <div><span>Task</span><strong>${escapeHtml(record.name)}</strong></div>
+        <div><span>Project</span><strong>${escapeHtml(record.projectName || labelForProject(record.projectId))}</strong></div>
+        <div><span>Assignee</span><strong>${escapeHtml(labelForEmployee(record.assigneeId))}</strong></div>
+        <div><span>Priority</span><strong class="priority-${escapeHtml((record.priority || "").toLowerCase())}">${escapeHtml(record.priority || "Medium")}</strong></div>
+        <div><span>Status</span><strong>${escapeHtml(record.status || "Not Started")}</strong></div>
+        <div><span>Due date</span><strong>${escapeHtml(record.dueDate || "Not set")}</strong></div>
+      </div>
+
+      <div class="task-tabs">
+        <button type="button" class="tab-button ${state.taskDetailTab === "comments" ? "is-active" : ""}" data-action="set-task-tab" data-tab="comments">Discussion (${comments.length})</button>
+        <button type="button" class="tab-button ${state.taskDetailTab === "audit" ? "is-active" : ""}" data-action="set-task-tab" data-tab="audit">Audit Logs (${auditLogs.length})</button>
+        <button type="button" class="tab-button ${state.taskDetailTab === "history" ? "is-active" : ""}" data-action="set-task-tab" data-tab="history">Activity History (${activities.length})</button>
+      </div>
+
+      <div class="task-tab-content">
+        ${state.taskDetailTab === "comments" ? `
+          <div class="comments-section">
+            <ul class="comments-list">
+              ${comments.length ? comments.map((c) => `
+                <li class="comment-item">
+                  <div class="comment-header">
+                    <span class="avatar">${escapeHtml(getInitials(c.userName))}</span>
+                    <div>
+                      <strong>${escapeHtml(c.userName)}</strong>
+                      <small class="muted-copy">${escapeHtml(c.createdAt)}</small>
+                    </div>
+                    ${(c.userId === state.user.id || state.user.role === "ADMIN") ? `
+                      <button type="button" class="table-action button-danger" data-action="delete-comment" data-task-id="${record.id}" data-comment-id="${c.id}">Delete</button>
+                    ` : ""}
+                  </div>
+                  <p class="comment-body">${escapeHtml(c.content)}</p>
+                </li>
+              `).join("") : `<p class="muted-copy">No comments yet. Start the discussion below.</p>`}
+            </ul>
+            <form id="add-comment-form" class="comment-form" data-task-id="${record.id}">
+              <textarea id="comment-content" name="content" rows="2" placeholder="Write a comment or discussion update…" required maxlength="2000"></textarea>
+              <button class="button button-primary" type="submit">Post comment</button>
+            </form>
+          </div>
+        ` : state.taskDetailTab === "audit" ? `
+          <div class="audit-section">
+            ${auditLogs.length ? `
+              <ul class="timeline-list">
+                ${auditLogs.map((l) => `
+                  <li class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                      <div class="timeline-header">
+                        <span class="badge-change badge-${escapeHtml(l.changeType)}">${escapeHtml(l.changeType.toUpperCase())}</span>
+                        <small class="muted-copy">${escapeHtml(l.createdAt)}</small>
+                      </div>
+                      <p class="timeline-text">
+                        <strong>${escapeHtml(l.oldValue || "None")}</strong> → <strong>${escapeHtml(l.newValue || "None")}</strong>
+                      </p>
+                      <small class="muted-copy">Changed by ${escapeHtml(l.userName)}</small>
+                    </div>
+                  </li>
+                `).join("")}
+              </ul>
+            ` : `<p class="muted-copy">No audit logs recorded for this task yet.</p>`}
+          </div>
+        ` : `
+          <div class="history-section">
+            ${activities.length ? `
+              <ul class="timeline-list">
+                ${activities.map((a) => `
+                  <li class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                      <div class="timeline-header">
+                        <strong>${escapeHtml(a.action.replace(/_/g, " "))}</strong>
+                        <small class="muted-copy">${escapeHtml(a.createdAt)}</small>
+                      </div>
+                      <p class="timeline-text">${escapeHtml(a.details)}</p>
+                      <small class="muted-copy">By ${escapeHtml(a.userName)}</small>
+                    </div>
+                  </li>
+                `).join("")}
+              </ul>
+            ` : `<p class="muted-copy">No activity recorded for this task yet.</p>`}
+          </div>
+        `}
+      </div>
+    `;
   }
   return "";
 }
@@ -1066,12 +1166,68 @@ async function restoreSession() {
   }
 }
 
+
+async function loadTaskDetails(taskId) {
+  try {
+    const [commentsRes, auditRes, historyRes] = await Promise.allSettled([
+      apiRequest(`/api/tasks/${taskId}/comments`),
+      apiRequest(`/api/tasks/${taskId}/audit-logs`),
+      apiRequest(`/api/tasks/${taskId}/history`),
+    ]);
+    state.taskComments = commentsRes.status === "fulfilled" ? (commentsRes.value.comments || []) : [];
+    state.taskAuditLogs = auditRes.status === "fulfilled" ? (auditRes.value.auditLogs || []) : [];
+    state.taskActivities = historyRes.status === "fulfilled" ? (historyRes.value.activities || []) : [];
+  } catch {
+    state.taskComments = [];
+    state.taskAuditLogs = [];
+    state.taskActivities = [];
+  }
+}
+
+async function handleCommentSubmit(form) {
+  const taskId = Number(form.dataset.taskId);
+  const textarea = form.querySelector('textarea[name="content"]');
+  const content = textarea?.value?.trim();
+  if (!content) return;
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    await apiRequest(`/api/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
+    textarea.value = "";
+    await loadTaskDetails(taskId);
+    render();
+    showToast("Comment posted.", "success");
+  } catch (error) {
+    if (submitButton) submitButton.disabled = false;
+    showToast(error.message || "Could not post comment.", "error");
+  }
+}
+
+async function deleteTaskComment(taskId, commentId) {
+  if (!window.confirm("Delete this comment?")) return;
+  try {
+    await apiRequest(`/api/tasks/${taskId}/comments/${commentId}`, {
+      method: "DELETE",
+    });
+    await loadTaskDetails(taskId);
+    render();
+    showToast("Comment deleted.", "success");
+  } catch (error) {
+    showToast(error.message || "Could not delete comment.", "error");
+  }
+}
 app.addEventListener("submit", (event) => {
   if (event.target.id === "auth-form") {
     handleAuthSubmit(event);
   } else if (event.target.id === "record-form") {
     event.preventDefault();
     saveRecord(event.target);
+  } else if (event.target.id === "add-comment-form") {
+    event.preventDefault();
+    handleCommentSubmit(event.target);
   }
 });
 
@@ -1124,6 +1280,13 @@ app.addEventListener("click", (event) => {
     logout();
   } else if (action === "save-task-status") {
     saveAssignedTaskStatus(actionButtonElement.dataset.id);
+  } else if (action === "set-task-tab") {
+    state.taskDetailTab = actionButtonElement.dataset.tab;
+    render();
+  } else if (action === "delete-comment") {
+    const taskId = Number(actionButtonElement.dataset.taskId);
+    const commentId = Number(actionButtonElement.dataset.commentId);
+    deleteTaskComment(taskId, commentId);
   } else if (action === "toggle-nav") {
     state.mobileNavOpen = !state.mobileNavOpen;
     render();
@@ -1140,7 +1303,7 @@ app.addEventListener("click", (event) => {
   } else if (action === "backdrop-close" && event.target === actionButtonElement) {
     state.modal = null;
     render();
-  } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "edit-task", "complete-task", "delete-task"].includes(action)) {
+  } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "view-task", "edit-task", "complete-task", "delete-task"].includes(action)) {
     handleRecordAction(action, actionButtonElement.dataset.id);
   }
 });

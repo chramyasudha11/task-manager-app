@@ -1,4 +1,3 @@
-
 import os
 import secrets
 import ipaddress
@@ -8,6 +7,8 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from auth import auth_bp, init_db
 from management import init_management_db, management_bp
+from audit import audit_bp
+from migrations import init_database
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -80,9 +81,11 @@ def create_app(test_config=None):
 
     init_db(app)
     init_management_db(app)
+    init_database(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(management_bp)
+    app.register_blueprint(audit_bp)
 
     @app.get("/")
     def home():
