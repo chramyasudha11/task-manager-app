@@ -366,6 +366,7 @@ function menuMarkup(activePage) {
           <strong>${escapeHtml(state.user.name)}</strong>
           <span>${escapeHtml(state.user.role.toLowerCase())}</span>
         </div>
+        <button class="logout-icon" type="button" data-action="open-password-modal" aria-label="Change password" title="Change password">🔑</button>
         <button class="logout-icon" type="button" data-action="logout" aria-label="Sign out" title="Sign out">↪</button>
       </div>
     </aside>`;
@@ -753,6 +754,33 @@ function detailModalContent(entity, record) {
 function modalMarkup() {
   if (!state.modal) return "";
   const { entity, id, view } = state.modal;
+  if (entity === "password") {
+    return `<div class="modal-backdrop" data-action="backdrop-close">
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+      <header class="modal-header"><div><span class="eyebrow">SECURITY</span><h2 id="password-modal-title">Change Password</h2></div><button class="modal-close" type="button" data-action="close-modal" aria-label="Close dialog">×</button></header>
+      <form id="password-form">
+        <div class="modal-content">
+          <div id="password-form-message"></div>
+          <div class="form-grid">
+            <div class="form-field form-field-full">
+              <label for="modal-currentPassword">Current password</label>
+              <input id="modal-currentPassword" name="currentPassword" type="password" autocomplete="current-password" placeholder="Enter current password" required>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="modal-newPassword">New password</label>
+              <input id="modal-newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="modal-confirmPassword">Confirm new password</label>
+              <input id="modal-confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Re-enter new password" required>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-footer"><button class="button button-quiet" type="button" data-action="close-modal">Cancel</button><button class="button button-primary" type="submit">Update password</button></footer>
+      </form>
+    </section>
+  </div>`;
+  }
   const pluralKey = `${entity}s`;
   const record = id === null ? {} : workspaceData[pluralKey]?.find((item) => item.id === id);
   const titleNames = { employee: "employee", team: "team", project: "project", task: "task" };
@@ -788,6 +816,7 @@ function mainContentMarkup() {
           </div>
           <div class="topbar-right">
             <span class="welcome">Signed in as ${escapeHtml(state.user.name)}</span>
+            <button class="button button-quiet" type="button" data-action="open-password-modal" style="font-size:12px;padding:4px 10px;">Change password</button>
             <span class="avatar" aria-hidden="true">${escapeHtml(getInitials(state.user.name))}</span>
           </div>
         </header>
@@ -978,6 +1007,55 @@ async function saveAssignedTaskStatus(taskId) {
   } catch (error) {
     button.disabled = false;
     showToast(error.message || "Task status could not be updated.", "error");
+  }
+}
+
+async function handlePasswordSubmit(form) {
+  const formData = new FormData(form);
+  const currentPassword = String(formData.get("currentPassword") || "");
+  const newPassword = String(formData.get("newPassword") || "");
+  const confirmPassword = String(formData.get("confirmPassword") || "");
+
+  const msgBox = form.querySelector("#password-form-message");
+  if (msgBox) msgBox.innerHTML = "";
+
+  if (!currentPassword || !newPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">Current password and new password are required.</div>';
+    return;
+  }
+  if (newPassword.length < 8) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">Password must contain at least 8 characters.</div>';
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">New passwords do not match.</div>';
+    return;
+  }
+  if (currentPassword === newPassword) {
+    if (msgBox) msgBox.innerHTML = '<div class="form-message error">New password cannot be the same as the current password.</div>';
+    return;
+  }
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = "Updating...";
+
+  try {
+    const res = await apiRequest("/api/account/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+    });
+    state.modal = null;
+    render();
+    showToast(res.message || "Password updated successfully.", "success");
+  } catch (error) {
+    if (msgBox) {
+      msgBox.innerHTML = `<div class="form-message error">${escapeHtml(error.message || "Failed to update password.")}</div>`;
+    } else {
+      showToast(error.message || "Failed to update password.", "error");
+    }
+    submitButton.disabled = false;
+    submitButton.textContent = "Update password";
   }
 }
 
@@ -1228,6 +1306,9 @@ app.addEventListener("submit", (event) => {
   } else if (event.target.id === "add-comment-form") {
     event.preventDefault();
     handleCommentSubmit(event.target);
+  } else if (event.target.id === "password-form") {
+    event.preventDefault();
+    handlePasswordSubmit(event.target);
   }
 });
 
@@ -1293,6 +1374,10 @@ app.addEventListener("click", (event) => {
   } else if (action === "close-nav") {
     state.mobileNavOpen = false;
     render();
+  } else if (action === "open-password-modal") {
+    state.modal = { entity: "password" };
+    render();
+    document.getElementById("modal-currentPassword")?.focus();
   } else if (action === "create-record") {
     const entity = actionButtonElement.dataset.entity;
     if (canManage(entity)) openModal(entity);
