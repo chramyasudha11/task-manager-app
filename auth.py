@@ -1,3 +1,4 @@
+
 import re
 import sqlite3
 import time
@@ -48,11 +49,19 @@ def init_db(app):
         )
 
         columns = [
+
+    row[1]
+    for row in database.execute(
+        "PRAGMA table_info(users)"
+    ).fetchall()
+]
+
             row[1]
             for row in database.execute(
                 "PRAGMA table_info(users)"
             ).fetchall()
         ]
+
 
         if "role" not in columns:
             database.execute(
@@ -61,6 +70,7 @@ def init_db(app):
                 ADD COLUMN role TEXT NOT NULL DEFAULT 'EMPLOYEE'
                 """
             )
+
 
         # Member 1: login rate limiting
         database.execute(
@@ -80,6 +90,7 @@ def init_db(app):
                 ON login_attempts(email, attempted_at)
             """
         )
+
 
         database.commit()
 
@@ -186,6 +197,12 @@ def signup():
         ), 400
 
     if account_type is not None and account_type not in {
+
+        "ADMIN", "EMPLOYEE"
+    }:
+        return jsonify(
+            error="Choose Admin Login or Employee Login to create the account."
+
         "ADMIN",
         "EMPLOYEE",
     }:
@@ -194,6 +211,7 @@ def signup():
                 "Choose Admin Login or Employee Login "
                 "to create the account."
             )
+
         ), 400
 
     name = name.strip()
@@ -205,9 +223,13 @@ def signup():
         ), 400
 
     if not EMAIL_PATTERN.fullmatch(email) or len(email) > 254:
+
+        return jsonify(error="Please enter a valid email address."), 400
+
         return jsonify(
             error="Please enter a valid email address."
         ), 400
+
 
     if len(password) < 8:
         return jsonify(
@@ -281,12 +303,16 @@ def signup():
             INSERT INTO users (name, email, password, role)
             VALUES (?, ?, ?, ?)
             """,
+
+            (name, email, generate_password_hash(password), role),
+
             (
                 name,
                 email,
                 generate_password_hash(password),
                 role,
             ),
+
         )
 
         if employee:
@@ -296,11 +322,14 @@ def signup():
                 SET user_id = ?, role = ?
                 WHERE id = ?
                 """,
-                (
+
+                (cursor.lastrowid, role, employee["id"]),
+    (
                     cursor.lastrowid,
                     role,
                     employee["id"],
                 ),
+
             )
         else:
             database.execute(
@@ -351,6 +380,29 @@ def login():
 
     email = data.get("email")
     password = data.get("password")
+
+
+    if (
+        not isinstance(email, str)
+        or not isinstance(password, str)
+        or not email.strip()
+        or not password
+    ):
+        return jsonify(error="Email and password are required."), 400
+
+    row = get_db().execute(
+        """
+        SELECT id, name, email, password, role
+        FROM users
+        WHERE email = ?
+        """,
+        (email.strip().lower(),),
+    ).fetchone()
+
+    if row is None or not check_password_hash(row["password"], password):
+        return jsonify(error="Incorrect email or password."), 401
+
+
 
     if (
         not isinstance(email, str)
@@ -480,6 +532,7 @@ def login():
 
     database.commit()
 
+
     session.clear()
     session["user_id"] = row["id"]
 
@@ -492,14 +545,20 @@ def login():
 @auth_bp.get("/me")
 @login_required
 def me():
+
+    return jsonify(user=public_user(g.current_user))
+
     return jsonify(
         user=public_user(g.current_user)
     )
 
 
+
 @auth_bp.post("/logout")
 def logout():
     session.clear()
+
+    return jsonify(message="Signed out successfully.")
 
     return jsonify(
         message="Signed out successfully."
@@ -640,6 +699,7 @@ def update_password():
     ), 200
 
 
+
 @auth_bp.get("/admin/dashboard")
 @roles_required("ADMIN")
 def admin_dashboard():
@@ -664,4 +724,8 @@ def employee_dashboard():
     return jsonify(
         message="Authenticated access granted.",
         user=public_user(g.current_user),
+
     )
+
+    )
+

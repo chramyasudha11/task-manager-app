@@ -1,3 +1,6 @@
+
+
+
 import os
 import secrets
 import ipaddress
@@ -83,8 +86,10 @@ def create_app(test_config=None):
 
     init_db(app)
     init_management_db(app)
+
     init_database(app)
     init_productivity_db(app)
+
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(management_bp)
