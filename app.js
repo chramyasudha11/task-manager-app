@@ -14,6 +14,13 @@ const state = {
   modal: null,
   search: "",
   statusFilter: "All",
+  taskView: "kanban",
+  selectedTaskIds: new Set(),
+  priorityFilter: "All",
+  projectFilter: "All",
+  activeTaskDetail: null,
+  taskDetailComments: [],
+  taskDetailActivities: [],
 };
 
 const workspaceData = { employees: [], teams: [], projects: [], tasks: [] };
@@ -155,6 +162,9 @@ function setPage(page) {
   state.mobileNavOpen = false;
   state.search = "";
   state.statusFilter = "All";
+  state.selectedTaskIds.clear();
+  state.priorityFilter = "All";
+  state.projectFilter = "All";
   render();
 }
 
@@ -451,10 +461,258 @@ function dashboardPageMarkup() {
     </section>`;
 }
 
+
+function kanbanCardMarkup(task) {
+  const isSelected = state.selectedTaskIds.has(task.id);
+  const isCompleted = task.status === "Completed";
+  const today = new Date().toISOString().slice(0, 10);
+  const isOverdue = !isCompleted && task.dueDate && task.dueDate < today;
+  const assigneeName = labelForEmployee(task.assigneeId);
+  const project = projectById(task.projectId);
+  const projectName = task.projectName || project?.name || "";
+
+  return `
+    <article class="kanban-card ${isCompleted ? "is-completed" : ""} ${isSelected ? "is-selected" : ""}"
+             draggable="true"
+             data-task-id="${task.id}"
+             data-search-text="${escapeHtml((task.name + " " + (task.description || "") + " " + projectName + " " + assigneeName + " " + task.priority).toLowerCase())}">
+      <div class="kanban-card-top">
+        <label class="card-checkbox-wrap" title="Select task for bulk action">
+          <input type="checkbox" class="task-checkbox" data-action="toggle-select-task" data-id="${task.id}" ${isSelected ? "checked" : ""} aria-label="Select task ${escapeHtml(task.name)}">
+        </label>
+        <span class="priority-badge priority-${escapeHtml(task.priority.toLowerCase())}">${escapeHtml(task.priority)}</span>
+        ${task.isRecurring ? `<span class="recurrence-badge" title="Recurring: ${escapeHtml(task.recurrenceInterval)}">🔁 ${escapeHtml(task.recurrenceInterval)}</span>` : ""}
+        <div class="card-top-spacer"></div>
+        <button class="card-quick-view" type="button" data-action="view-task" data-id="${task.id}" title="View details" aria-label="View task details">⋯</button>
+      </div>
+      <h4 class="kanban-card-title" data-action="view-task" data-id="${task.id}">${escapeHtml(task.name)}</h4>
+      ${task.description ? `<p class="kanban-card-desc">${escapeHtml(task.description.length > 95 ? task.description.slice(0, 95) + "…" : task.description)}</p>` : ""}
+      ${projectName ? `<div class="kanban-card-project"><span class="project-tag"><span class="tag-icon" aria-hidden="true">▧</span> ${escapeHtml(projectName)}</span></div>` : ""}
+      <div class="kanban-card-footer">
+        <div class="card-footer-left">
+          ${task.dueDate ? `<span class="kanban-card-due ${isOverdue ? "is-overdue" : ""}" title="${isOverdue ? "Overdue!" : "Due date"}"><span aria-hidden="true">📅</span> ${escapeHtml(task.dueDate)}</span>` : ""}
+          <span class="kanban-card-comments" data-action="view-task" data-id="${task.id}" title="${task.commentsCount || 0} comments"><span aria-hidden="true">💬</span> ${task.commentsCount || 0}</span>
+        </div>
+        <div class="card-footer-right">
+          <span class="avatar avatar-sm" title="${escapeHtml(assigneeName)}">${escapeHtml(getInitials(assigneeName))}</span>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function taskWorkspaceMarkup(details) {
+  const canEdit = canManage("task");
+  const q = state.search.trim().toLowerCase();
+
+  const filteredTasks = workspaceData.tasks.filter((task) => {
+    const proj = projectById(task.projectId);
+    const projName = task.projectName || proj?.name || "";
+    const empName = labelForEmployee(task.assigneeId);
+    const searchBlob = `${task.name} ${task.description || ""} ${projName} ${empName} ${task.priority} ${task.status}`.toLowerCase();
+    const matchesSearch = !q || searchBlob.includes(q);
+    const matchesPriority = state.priorityFilter === "All" || task.priority === state.priorityFilter;
+    const matchesProject = state.projectFilter === "All" || String(task.projectId) === state.projectFilter;
+    const matchesStatus = state.statusFilter === "All" || task.status === state.statusFilter;
+    return matchesSearch && matchesPriority && matchesProject && (state.taskView === "kanban" || matchesStatus);
+  });
+
+  const todoTasks = filteredTasks.filter((t) => t.status === "Not Started" || t.status === "To Do");
+  const inProgressTasks = filteredTasks.filter((t) => t.status === "In Progress");
+  const completedTasks = filteredTasks.filter((t) => t.status === "Completed");
+
+  const allVisibleSelected = filteredTasks.length > 0 && filteredTasks.every((t) => state.selectedTaskIds.has(t.id));
+
+  return `
+    <div class="page-heading">
+      <div>
+        <span class="eyebrow">WORKSPACE</span>
+        <h1>Tasks</h1>
+        <p>Interactive Kanban board, task tracking, and work assignments.</p>
+      </div>
+      <span class="role-badge">${escapeHtml(state.user.role)}</span>
+    </div>
+
+    <section class="surface-card feature-panel">
+      <div class="section-title-row section-title-tight">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <h2>Task Workspace</h2>
+          <span class="count-pill">${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="view-toggle" role="group" aria-label="Task view mode">
+          <button class="view-toggle-btn ${state.taskView === "kanban" ? "active" : ""}" type="button" data-action="set-task-view" data-view="kanban" aria-pressed="${state.taskView === "kanban"}">
+            <span aria-hidden="true">▦</span> Kanban Board
+          </button>
+          <button class="view-toggle-btn ${state.taskView === "list" ? "active" : ""}" type="button" data-action="set-task-view" data-view="list" aria-pressed="${state.taskView === "list"}">
+            <span aria-hidden="true">☷</span> List Table
+          </button>
+        </div>
+      </div>
+
+      <div class="feature-toolbar">
+        <div class="toolbar-filters">
+          <input class="search-box" type="search" data-search="true" aria-label="Search tasks" placeholder="Search tasks, descriptions, assignees..." value="${escapeHtml(state.search)}">
+          <select class="filter-select" aria-label="Filter by priority" data-action="filter-priority">
+            <option value="All" ${state.priorityFilter === "All" ? "selected" : ""}>All priorities</option>
+            <option value="High" ${state.priorityFilter === "High" ? "selected" : ""}>High priority</option>
+            <option value="Medium" ${state.priorityFilter === "Medium" ? "selected" : ""}>Medium priority</option>
+            <option value="Low" ${state.priorityFilter === "Low" ? "selected" : ""}>Low priority</option>
+          </select>
+          <select class="filter-select" aria-label="Filter by project" data-action="filter-project">
+            <option value="All" ${state.projectFilter === "All" ? "selected" : ""}>All projects</option>
+            ${workspaceData.projects.map((p) => `<option value="${p.id}" ${state.projectFilter === String(p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+          </select>
+          ${state.taskView === "list" ? `
+            <select class="filter-select" aria-label="Filter by status" data-action="filter-status">
+              <option value="All" ${state.statusFilter === "All" ? "selected" : ""}>All statuses</option>
+              <option value="Not Started" ${state.statusFilter === "Not Started" ? "selected" : ""}>Not Started</option>
+              <option value="In Progress" ${state.statusFilter === "In Progress" ? "selected" : ""}>In Progress</option>
+              <option value="Completed" ${state.statusFilter === "Completed" ? "selected" : ""}>Completed</option>
+            </select>
+          ` : ""}
+        </div>
+        ${canEdit ? `<button class="button button-primary" type="button" data-action="create-record" data-entity="task">+ Add task</button>` : ""}
+      </div>
+
+      ${state.selectedTaskIds.size > 0 ? `
+        <div class="bulk-actions-bar" role="toolbar" aria-label="Bulk actions toolbar">
+          <div class="bulk-selection-info">
+            <span class="bulk-count-pill">${state.selectedTaskIds.size}</span>
+            <strong>task${state.selectedTaskIds.size === 1 ? "" : "s"} selected</strong>
+          </div>
+          <div class="bulk-action-buttons">
+            <span class="bulk-label">Move to:</span>
+            <button class="button button-sm button-quiet" type="button" data-action="bulk-status" data-status="Not Started">To Do</button>
+            <button class="button button-sm button-quiet" type="button" data-action="bulk-status" data-status="In Progress">In Progress</button>
+            <button class="button button-sm button-quiet" type="button" data-action="bulk-status" data-status="Completed">Completed</button>
+            ${canEdit ? `
+              <select class="bulk-assign-select" data-action="bulk-assign" aria-label="Reassign selected tasks">
+                <option value="">Reassign to…</option>
+                ${employeeNameOptions()}
+              </select>
+              <button class="button button-sm button-danger" type="button" data-action="bulk-delete">Delete</button>
+            ` : ""}
+            <button class="button button-sm button-quiet" type="button" data-action="clear-selection">Clear</button>
+          </div>
+        </div>
+      ` : ""}
+
+      ${state.taskView === "kanban" ? `
+        <div class="kanban-board" role="region" aria-label="Kanban board">
+          <div class="kanban-column" data-status-column="Not Started">
+            <div class="kanban-column-header">
+              <div class="kanban-column-title-group">
+                <span class="kanban-status-dot status-todo" aria-hidden="true"></span>
+                <h3>To Do</h3>
+                <span class="kanban-column-count">${todoTasks.length}</span>
+              </div>
+              ${canEdit ? `<button class="kanban-quick-add" type="button" data-action="create-record" data-entity="task" title="Add task to To Do">+</button>` : ""}
+            </div>
+            <div class="kanban-column-body" data-status="Not Started" role="region" aria-label="To Do column">
+              ${todoTasks.length ? todoTasks.map(kanbanCardMarkup).join("") : `<div class="kanban-empty"><span class="kanban-empty-icon">✓</span><p>No tasks to do</p></div>`}
+            </div>
+          </div>
+
+          <div class="kanban-column" data-status-column="In Progress">
+            <div class="kanban-column-header">
+              <div class="kanban-column-title-group">
+                <span class="kanban-status-dot status-inprogress" aria-hidden="true"></span>
+                <h3>In Progress</h3>
+                <span class="kanban-column-count">${inProgressTasks.length}</span>
+              </div>
+            </div>
+            <div class="kanban-column-body" data-status="In Progress" role="region" aria-label="In Progress column">
+              ${inProgressTasks.length ? inProgressTasks.map(kanbanCardMarkup).join("") : `<div class="kanban-empty"><span class="kanban-empty-icon">⏳</span><p>No tasks in progress</p></div>`}
+            </div>
+          </div>
+
+          <div class="kanban-column" data-status-column="Completed">
+            <div class="kanban-column-header">
+              <div class="kanban-column-title-group">
+                <span class="kanban-status-dot status-completed" aria-hidden="true"></span>
+                <h3>Completed</h3>
+                <span class="kanban-column-count">${completedTasks.length}</span>
+              </div>
+            </div>
+            <div class="kanban-column-body" data-status="Completed" role="region" aria-label="Completed column">
+              ${completedTasks.length ? completedTasks.map(kanbanCardMarkup).join("") : `<div class="kanban-empty"><span class="kanban-empty-icon">🎉</span><p>No completed tasks</p></div>`}
+            </div>
+          </div>
+        </div>
+      ` : `
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col" class="table-select-cell">
+                  <input type="checkbox" data-action="toggle-select-all" ${allVisibleSelected ? "checked" : ""} aria-label="Select all visible tasks">
+                </th>
+                <th scope="col">Task</th>
+                <th scope="col">Project</th>
+                <th scope="col">Assignee</th>
+                <th scope="col">Due date</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="record-table">
+              ${filteredTasks.map((task) => `
+                <tr data-search-text="${escapeHtml((task.name + " " + (task.projectName || labelForProject(task.projectId)) + " " + labelForEmployee(task.assigneeId) + " " + task.priority + " " + task.status).toLowerCase())}" class="${state.selectedTaskIds.has(task.id) ? "is-selected-row" : ""}">
+                  <td class="table-select-cell">
+                    <input type="checkbox" data-action="toggle-select-task" data-id="${task.id}" ${state.selectedTaskIds.has(task.id) ? "checked" : ""} aria-label="Select ${escapeHtml(task.name)}">
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(task.name)}</strong>
+                    ${task.isRecurring ? `<span class="recurrence-badge" title="Recurring: ${escapeHtml(task.recurrenceInterval)}">🔁 ${escapeHtml(task.recurrenceInterval)}</span>` : ""}
+                    ${task.description ? `<small class="cell-description">${escapeHtml(task.description.length > 60 ? task.description.slice(0, 60) + "…" : task.description)}</small>` : ""}
+                  </td>
+                  <td>${escapeHtml(task.projectName || labelForProject(task.projectId))}</td>
+                  <td>${escapeHtml(labelForEmployee(task.assigneeId))}</td>
+                  <td>${escapeHtml(task.dueDate || "Not set")}</td>
+                  <td><span class="priority-${escapeHtml(task.priority.toLowerCase())}">${escapeHtml(task.priority)}</span></td>
+                  <td>
+                    ${state.user.role === "EMPLOYEE" ? `
+                      <select class="task-status-select" aria-label="Status for ${escapeHtml(task.name)}" data-task-status="${task.id}">
+                        ${["Not Started", "In Progress", "Completed"].map((status) => `<option ${task.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                      </select>
+                    ` : `<span class="status-badge ${task.status === "Completed" ? "status-good" : ""}">${escapeHtml(task.status)}</span>`}
+                  </td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="table-action" type="button" data-action="view-task" data-id="${task.id}">View</button>
+                      ${state.user.role === "EMPLOYEE" ? `
+                        <button class="table-action" type="button" data-action="save-task-status" data-id="${task.id}">Save status</button>
+                      ` : `
+                        ${task.status !== "Completed" ? actionButton("complete-task", task.id, "Complete") : ""}
+                        ${actionButton("edit-task", task.id, "Edit")}
+                        ${actionButton("delete-task", task.id, "Delete", "danger")}
+                      `}
+                    </div>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          <div class="empty-state table-empty" ${filteredTasks.length ? "hidden" : ""}>
+            <span class="empty-state-icon" aria-hidden="true">${details.icon}</span>
+            <h3>${workspaceData.tasks.length ? "No matching tasks" : "No tasks yet"}</h3>
+            <p>${workspaceData.tasks.length ? "Try another search, priority, or project filter." : canEdit ? "Create your first task to get started." : "There are no tasks to display yet."}</p>
+          </div>
+        </div>
+      `}
+    </section>
+  `;
+}
+
 function featurePageMarkup(key) {
   const details = featureDetails[key];
   if (!details || (state.user.role !== "ADMIN" && key !== "tasks")) {
     return `<div class="form-message error" role="alert">You do not have access to this workspace area.</div>`;
+  }
+
+  if (key === "tasks") {
+    return taskWorkspaceMarkup(details);
   }
 
   const labels = {
@@ -604,6 +862,33 @@ function modalFormFields(entity, record = {}) {
       ${fieldMarkup("Due date", "dueDate", record.dueDate || "", "date")}
       ${selectFieldMarkup("Priority", "priority", ["Low", "Medium", "High"].map((priority) => `<option ${record.priority === priority ? "selected" : ""}>${priority}</option>`).join(""))}
       ${selectFieldMarkup("Status", "status", ["Not Started", "In Progress", "Completed"].map((status) => `<option ${record.status === status ? "selected" : ""}>${status}</option>`).join(""))}
+      <div class="form-field form-field-full">
+        <label for="modal-description">Description</label>
+        <textarea id="modal-description" name="description" rows="3" placeholder="Add task instructions or details…">${escapeHtml(record.description || "")}</textarea>
+      </div>
+      <div class="form-field form-field-full recurrence-control-group">
+        <label class="check-option">
+          <input type="checkbox" id="modal-isRecurring" name="isRecurring" value="1" ${record.isRecurring ? "checked" : ""} data-action="toggle-recurrence-options">
+          <span><strong>Recurring task (Repeat automatically)</strong></span>
+        </label>
+        <div id="recurrence-subfields" class="recurrence-subfields ${record.isRecurring ? "" : "is-hidden"}">
+          <div class="form-grid form-grid-compact">
+            <div class="form-field">
+              <label for="modal-recurrenceInterval">Frequency</label>
+              <select id="modal-recurrenceInterval" name="recurrenceInterval">
+                <option value="daily" ${record.recurrenceInterval === "daily" ? "selected" : ""}>Daily (Every day)</option>
+                <option value="weekly" ${record.recurrenceInterval === "weekly" || !record.recurrenceInterval || record.recurrenceInterval === "none" ? "selected" : ""}>Weekly (Every 7 days)</option>
+                <option value="biweekly" ${record.recurrenceInterval === "biweekly" ? "selected" : ""}>Bi-weekly (Every 14 days)</option>
+                <option value="monthly" ${record.recurrenceInterval === "monthly" ? "selected" : ""}>Monthly</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="modal-recurrenceEndDate">Repeat until (Optional)</label>
+              <input id="modal-recurrenceEndDate" name="recurrenceEndDate" type="date" value="${escapeHtml(record.recurrenceEndDate || "")}">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -646,6 +931,93 @@ function detailModalContent(entity, record) {
       <p class="muted-copy">${members.length ? members.map((employee) => escapeHtml(employee.name)).join(", ") : "No team members assigned."}</p>
       <h3 class="modal-section-title">Project tasks</h3>
       ${projectTasks.length ? `<ul class="project-task-list">${projectTasks.map((task) => `<li><span class="task-dot ${task.status === "Completed" ? "is-done" : ""}"></span><span>${escapeHtml(task.name)}</span><small>${escapeHtml(task.status)}</small></li>`).join("")}</ul>` : `<p class="muted-copy">No tasks assigned to this project yet.</p>`}`;
+  }
+
+  if (entity === "task") {
+    const task = state.activeTaskDetail || record;
+    const project = projectById(task.projectId);
+    const assignee = employeeById(task.assigneeId);
+    const assigneeName = labelForEmployee(task.assigneeId);
+    const projectName = task.projectName || project?.name || "No project";
+    const comments = state.taskDetailComments || [];
+    const activities = state.taskDetailActivities || [];
+    const isCompleted = task.status === "Completed";
+    const canMove = state.user.role === "ADMIN" || (state.user.role === "EMPLOYEE" && task.assigneeId === state.currentEmployeeId);
+
+    return `
+      <div class="task-detail-modal">
+        <div class="task-detail-top">
+          <div class="task-detail-badges">
+            <span class="status-badge ${isCompleted ? "status-good" : ""}">${escapeHtml(task.status)}</span>
+            <span class="priority-badge priority-${escapeHtml((task.priority || "Medium").toLowerCase())}">${escapeHtml(task.priority)} priority</span>
+            ${task.isRecurring ? `<span class="recurrence-pill" title="Interval: ${escapeHtml(task.recurrenceInterval)}">🔁 Repeats ${escapeHtml(task.recurrenceInterval)}</span>` : '<span class="recurrence-pill muted">Not recurring</span>'}
+          </div>
+          ${canMove ? `
+            <div class="task-quick-status-group">
+              <span class="task-quick-label">Move to:</span>
+              <button class="button button-sm button-quiet ${task.status === "Not Started" ? "is-active" : ""}" type="button" data-action="quick-move-task" data-id="${task.id}" data-status="Not Started">To Do</button>
+              <button class="button button-sm button-quiet ${task.status === "In Progress" ? "is-active" : ""}" type="button" data-action="quick-move-task" data-id="${task.id}" data-status="In Progress">In Progress</button>
+              <button class="button button-sm button-quiet ${task.status === "Completed" ? "is-active" : ""}" type="button" data-action="quick-move-task" data-id="${task.id}" data-status="Completed">Completed</button>
+            </div>
+          ` : ""}
+        </div>
+
+        <div class="detail-grid">
+          <div><span>Project</span><strong>${escapeHtml(projectName)}</strong></div>
+          <div><span>Assignee</span><strong>${escapeHtml(assigneeName)}${assignee?.department ? ` (${escapeHtml(assignee.department)})` : ""}</strong></div>
+          <div><span>Due date</span><strong>${escapeHtml(task.dueDate || "Not set")}</strong></div>
+          <div><span>Recurrence</span><strong>${task.isRecurring ? `Every ${escapeHtml(task.recurrenceInterval)}${task.recurrenceEndDate ? ` until ${escapeHtml(task.recurrenceEndDate)}` : ""}` : "None"}</strong></div>
+        </div>
+
+        <div class="task-detail-desc-block">
+          <span class="detail-block-title">Description</span>
+          <p class="modal-description">${escapeHtml(task.description || "No description provided.")}</p>
+        </div>
+
+        <div class="task-detail-sections">
+          <div class="task-comments-section">
+            <h3 class="modal-section-title">Comments (${comments.length})</h3>
+            <div class="comments-list">
+              ${comments.length ? comments.map((c) => `
+                <div class="comment-bubble">
+                  <div class="comment-header">
+                    <span class="avatar avatar-xs">${escapeHtml(getInitials(c.authorName))}</span>
+                    <strong>${escapeHtml(c.authorName)}</strong>
+                    <span class="role-pill">${escapeHtml(c.authorRole)}</span>
+                    <small class="comment-time">${escapeHtml(c.createdAt || "")}</small>
+                  </div>
+                  <div class="comment-body">${escapeHtml(c.content)}</div>
+                </div>
+              `).join("") : '<p class="muted-copy">No comments yet. Leave a note below.</p>'}
+            </div>
+            <form id="task-comment-form" data-task-id="${task.id}" class="task-comment-form">
+              <div class="form-field">
+                <label for="new-comment-input">Add a comment</label>
+                <textarea id="new-comment-input" name="content" rows="2" placeholder="Write a comment or status update…" required maxlength="2000"></textarea>
+              </div>
+              <button class="button button-primary button-sm" type="submit">Post comment</button>
+            </form>
+          </div>
+
+          <div class="task-activities-section">
+            <h3 class="modal-section-title">Activity Timeline</h3>
+            <div class="activity-timeline">
+              ${activities.length ? activities.map((a) => `
+                <div class="timeline-entry">
+                  <span class="timeline-dot ${a.action.includes("completed") ? "dot-success" : ""}"></span>
+                  <div class="timeline-content">
+                    <div class="timeline-text">
+                      <strong>${escapeHtml(a.actorName)}</strong>: ${escapeHtml(a.details || a.action)}
+                    </div>
+                    <small class="timeline-time">${escapeHtml(a.createdAt || "")}</small>
+                  </div>
+                </div>
+              `).join("") : '<p class="muted-copy">No activity logged yet.</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
   return "";
 }
@@ -700,9 +1072,190 @@ function mainContentMarkup() {
     ${modalMarkup()}`;
 }
 
+
+async function openTaskDetail(taskId) {
+  state.modal = { entity: "task", id: Number(taskId), view: true };
+  state.activeTaskDetail = null;
+  state.taskDetailComments = [];
+  state.taskDetailActivities = [];
+  render();
+
+  try {
+    const data = await apiRequest(`/api/tasks/${taskId}`);
+    if (state.modal && state.modal.entity === "task" && state.modal.id === Number(taskId)) {
+      state.activeTaskDetail = data.task;
+      state.taskDetailComments = data.task.comments || [];
+      state.taskDetailActivities = data.task.activities || [];
+      render();
+    }
+  } catch (error) {
+    showToast(error.message || "Could not load task details.", "error");
+  }
+}
+
+async function moveTaskStatus(taskId, targetStatus) {
+  const task = workspaceData.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const currentNormalized = (task.status === "To Do" ? "Not Started" : task.status);
+  const targetNormalized = (targetStatus === "To Do" ? "Not Started" : targetStatus);
+  if (currentNormalized === targetNormalized) return;
+
+  if (state.user.role === "EMPLOYEE" && task.assigneeId !== state.currentEmployeeId) {
+    showToast("You can only update tasks assigned to you.", "error");
+    return;
+  }
+
+  const prevStatus = task.status;
+  task.status = targetStatus;
+  render();
+
+  try {
+    await apiRequest(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: targetStatus }),
+    });
+    showToast(`Task moved to ${targetStatus === "Not Started" ? "To Do" : targetStatus}.`, "success");
+    await loadWorkspaceData();
+    render();
+  } catch (error) {
+    task.status = prevStatus;
+    render();
+    showToast(error.message || "Failed to move task.", "error");
+  }
+}
+
+function attachDragAndDropListeners() {
+  const cards = document.querySelectorAll('.kanban-card[draggable="true"]');
+  const columns = document.querySelectorAll(".kanban-column-body");
+
+  cards.forEach((card) => {
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", card.dataset.taskId);
+      e.dataTransfer.effectAllowed = "move";
+      card.classList.add("is-dragging");
+    });
+
+    card.addEventListener("dragend", () => {
+      card.classList.remove("is-dragging");
+      document.querySelectorAll(".kanban-column-body").forEach((col) => {
+        col.classList.remove("drag-over");
+      });
+    });
+  });
+
+  columns.forEach((column) => {
+    column.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      column.classList.add("drag-over");
+    });
+
+    column.addEventListener("dragleave", (e) => {
+      if (!column.contains(e.relatedTarget)) {
+        column.classList.remove("drag-over");
+      }
+    });
+
+    column.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      column.classList.remove("drag-over");
+      const taskId = Number(e.dataTransfer.getData("text/plain"));
+      const targetStatus = column.dataset.status;
+      if (!taskId || !targetStatus) return;
+      await moveTaskStatus(taskId, targetStatus);
+    });
+  });
+}
+
+async function handleBulkStatus(status) {
+  const taskIds = Array.from(state.selectedTaskIds);
+  if (!taskIds.length) return;
+
+  try {
+    await apiRequest("/api/tasks/bulk", {
+      method: "POST",
+      body: JSON.stringify({ taskIds, action: "status", status }),
+    });
+    state.selectedTaskIds.clear();
+    await loadWorkspaceData();
+    render();
+    showToast(`Updated ${taskIds.length} tasks to ${status === "Not Started" ? "To Do" : status}.`, "success");
+  } catch (error) {
+    showToast(error.message || "Bulk status update failed.", "error");
+  }
+}
+
+async function handleBulkAssign(assigneeId) {
+  const taskIds = Array.from(state.selectedTaskIds);
+  if (!taskIds.length) return;
+  const parsedAssignee = assigneeId ? Number(assigneeId) : null;
+
+  try {
+    await apiRequest("/api/tasks/bulk", {
+      method: "POST",
+      body: JSON.stringify({ taskIds, action: "assign", assigneeId: parsedAssignee }),
+    });
+    state.selectedTaskIds.clear();
+    await loadWorkspaceData();
+    render();
+    showToast(`Reassigned ${taskIds.length} tasks.`, "success");
+  } catch (error) {
+    showToast(error.message || "Bulk assign failed.", "error");
+  }
+}
+
+async function handleBulkDelete() {
+  const taskIds = Array.from(state.selectedTaskIds);
+  if (!taskIds.length) return;
+  if (!window.confirm(`Are you sure you want to delete ${taskIds.length} selected tasks?`)) return;
+
+  try {
+    await apiRequest("/api/tasks/bulk", {
+      method: "POST",
+      body: JSON.stringify({ taskIds, action: "delete" }),
+    });
+    state.selectedTaskIds.clear();
+    await loadWorkspaceData();
+    render();
+    showToast(`Deleted ${taskIds.length} tasks.`, "success");
+  } catch (error) {
+    showToast(error.message || "Bulk delete failed.", "error");
+  }
+}
+
+async function handleCommentSubmit(event) {
+  event.preventDefault();
+  const form = event.target;
+  const taskId = form.dataset.taskId;
+  const content = String(form.content.value || "").trim();
+  if (!content) return;
+
+  const button = form.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+
+  try {
+    await apiRequest(`/api/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
+    form.reset();
+    showToast("Comment posted.", "success");
+    await openTaskDetail(taskId);
+    await loadWorkspaceData();
+  } catch (error) {
+    showToast(error.message || "Failed to post comment.", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function render() {
   if (state.user) {
     app.innerHTML = mainContentMarkup();
+    if (state.page === "tasks" && state.taskView === "kanban") {
+      attachDragAndDropListeners();
+    }
   } else {
     app.innerHTML = authPanelMarkup();
   }
@@ -765,8 +1318,12 @@ async function saveRecord(form) {
     }
   } else if (entity === "task") {
     record.name = String(record.name || "").trim();
+    record.description = String(record.description || "").trim();
     record.projectId = record.projectId ? Number(record.projectId) : null;
     record.assigneeId = record.assigneeId ? Number(record.assigneeId) : null;
+    record.isRecurring = formData.get("isRecurring") === "1";
+    record.recurrenceInterval = record.isRecurring ? (record.recurrenceInterval || "weekly") : "none";
+    record.recurrenceEndDate = record.isRecurring && record.recurrenceEndDate ? record.recurrenceEndDate : null;
   }
 
   if (!record.name) {
@@ -805,7 +1362,10 @@ async function handleRecordAction(action, id) {
   const entity = action.slice(action.indexOf("-") + 1).replace(/-task$/, "");
   const recordId = Number(id);
 
-  if (action.startsWith("view-")) {
+  if (action === "view-task") {
+    openTaskDetail(recordId);
+    return;
+  } else if (action.startsWith("view-")) {
     openModal(entity, recordId, true);
   } else if (action.startsWith("edit-")) {
     openEdit(entity, recordId);
@@ -1072,6 +1632,8 @@ app.addEventListener("submit", (event) => {
   } else if (event.target.id === "record-form") {
     event.preventDefault();
     saveRecord(event.target);
+  } else if (event.target.id === "task-comment-form") {
+    handleCommentSubmit(event);
   }
 });
 
@@ -1140,6 +1702,52 @@ app.addEventListener("click", (event) => {
   } else if (action === "backdrop-close" && event.target === actionButtonElement) {
     state.modal = null;
     render();
+  } else if (action === "set-task-view") {
+    state.taskView = actionButtonElement.dataset.view;
+    render();
+  } else if (action === "toggle-select-task") {
+    const id = Number(actionButtonElement.dataset.id);
+    if (state.selectedTaskIds.has(id)) {
+      state.selectedTaskIds.delete(id);
+    } else {
+      state.selectedTaskIds.add(id);
+    }
+    render();
+  } else if (action === "toggle-select-all") {
+    const q = state.search.trim().toLowerCase();
+    const visibleTasks = workspaceData.tasks.filter((task) => {
+      const proj = projectById(task.projectId);
+      const projName = task.projectName || proj?.name || "";
+      const empName = labelForEmployee(task.assigneeId);
+      const searchBlob = `${task.name} ${task.description || ""} ${projName} ${empName} ${task.priority} ${task.status}`.toLowerCase();
+      const matchesSearch = !q || searchBlob.includes(q);
+      const matchesPriority = state.priorityFilter === "All" || task.priority === state.priorityFilter;
+      const matchesProject = state.projectFilter === "All" || String(task.projectId) === state.projectFilter;
+      const matchesStatus = state.statusFilter === "All" || task.status === state.statusFilter;
+      return matchesSearch && matchesPriority && matchesProject && (state.taskView === "kanban" || matchesStatus);
+    });
+    if (visibleTasks.every((t) => state.selectedTaskIds.has(t.id))) {
+      visibleTasks.forEach((t) => state.selectedTaskIds.delete(t.id));
+    } else {
+      visibleTasks.forEach((t) => state.selectedTaskIds.add(t.id));
+    }
+    render();
+  } else if (action === "clear-selection") {
+    state.selectedTaskIds.clear();
+    render();
+  } else if (action === "bulk-status") {
+    handleBulkStatus(actionButtonElement.dataset.status);
+  } else if (action === "bulk-delete") {
+    handleBulkDelete();
+  } else if (action === "view-task") {
+    openTaskDetail(actionButtonElement.dataset.id);
+  } else if (action === "quick-move-task") {
+    moveTaskStatus(Number(actionButtonElement.dataset.id), actionButtonElement.dataset.status);
+  } else if (action === "toggle-recurrence-options") {
+    const subfields = document.getElementById("recurrence-subfields");
+    if (subfields) {
+      subfields.classList.toggle("is-hidden", !actionButtonElement.checked);
+    }
   } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "edit-task", "complete-task", "delete-task"].includes(action)) {
     handleRecordAction(action, actionButtonElement.dataset.id);
   }
@@ -1164,6 +1772,21 @@ app.addEventListener("change", (event) => {
   if (event.target.matches('[data-action="filter-status"]')) {
     state.statusFilter = event.target.value;
     render();
+  } else if (event.target.matches('[data-action="filter-priority"]')) {
+    state.priorityFilter = event.target.value;
+    render();
+  } else if (event.target.matches('[data-action="filter-project"]')) {
+    state.projectFilter = event.target.value;
+    render();
+  } else if (event.target.matches('[data-action="bulk-assign"]')) {
+    if (event.target.value) {
+      handleBulkAssign(event.target.value);
+    }
+  } else if (event.target.matches('[data-action="toggle-recurrence-options"]')) {
+    const subfields = document.getElementById("recurrence-subfields");
+    if (subfields) {
+      subfields.classList.toggle("is-hidden", !event.target.checked);
+    }
   }
 });
 
