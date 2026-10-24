@@ -1131,8 +1131,7 @@ def update_task(record_id):
         if task is None:
             return _not_found("task")
         if employee is None or task["assignee_id"] != employee["id"]:
-
-        employee = database.execute(
+            employee = database.execute(
             "SELECT id FROM employees WHERE user_id = ?", (g.current_user["id"],)
         ).fetchone()
         if employee is None or old_task["assignee_id"] != employee["id"]:

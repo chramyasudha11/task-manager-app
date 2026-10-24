@@ -1,4 +1,3 @@
-
 """Member 2: session-authenticated task REST API using Member 1's users.db.
 
 Role visibility:
@@ -33,9 +32,11 @@ STATUS_STORAGE = {
     "completed": "Completed",
 }
 VALID_PRIORITIES = {"Low", "Medium", "High"}
+VALID_RECURRENCES = {"none", "daily", "weekly", "monthly", "yearly"}
 EDITABLE_FIELDS = {
-    "title", "description", "status", "priority", "category", "due_date"
-
+    "title", "description", "status", "priority", "category", "due_date",
+    "recurrence_pattern", "recurrence", "recurrence_interval", "recurrence_end_date"
+}
 STATUS_API = {
     "Pending": "pending",
     "pending": "pending",
@@ -47,13 +48,6 @@ STATUS_API = {
     "in_progress": "in_progress",
     "Completed": "completed",
     "completed": "completed",
-}
-VALID_PRIORITIES = {"Low", "Medium", "High"}
-VALID_RECURRENCES = {"none", "daily", "weekly", "monthly", "yearly"}
-EDITABLE_FIELDS = {
-    "title", "description", "status", "priority", "category", "due_date",
-    "recurrence_pattern", "recurrence", "recurrence_interval", "recurrence_end_date"
-
 }
 MANAGEMENT_ROLES = {"ADMIN", "MANAGER"}
 
@@ -89,10 +83,8 @@ def _now():
 
 
 def _columns(conn):
-    return {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(tasks)")
-    }
+    return {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
+
 
 def _status_storage(conn, status_key):
     table_row = conn.execute(
@@ -111,7 +103,9 @@ def _status_storage(conn, status_key):
             "in_progress": "In Progress",
             "completed": "Completed",
         }
-    norm_key = STATUS_API.get(status_key, status_key.lower().replace("-", "_").replace(" ", "_"))
+    norm_key = STATUS_API.get(
+        status_key, str(status_key).lower().replace("-", "_").replace(" ", "_")
+    )
     return mapping.get(norm_key, "Pending")
 
 
@@ -170,11 +164,7 @@ def _init_tasks_db_internal():
 
         for name, definition in migrations.items():
             if name not in old_columns:
-                conn.execute(
-                    f"ALTER TABLE tasks ADD COLUMN {name} {definition}"
-                )
-
-
+                conn.execute(f"ALTER TABLE tasks ADD COLUMN {name} {definition}")
 
         if "name" in old_columns and "title" in old_columns:
             conn.execute("""
@@ -182,7 +172,6 @@ def _init_tasks_db_internal():
                 SET title = name
                 WHERE (title IS NULL OR title = '') AND name IS NOT NULL
             """)
-
 
         if "is_completed" in old_columns and "status" not in old_columns:
             conn.execute("""
@@ -202,7 +191,6 @@ def _init_tasks_db_internal():
                   )
             """)
 
-        # Normalize older status spellings.
         conn.execute("""
             UPDATE tasks SET status = 'Pending'
             WHERE LOWER(TRIM(status)) IN ('todo', 'pending')
@@ -230,8 +218,6 @@ def _init_tasks_db_internal():
             WHERE LOWER(TRIM(priority)) = 'high'
         """)
 
-
-
         conn.execute("""
             UPDATE tasks SET recurrence_pattern = 'none'
             WHERE recurrence_pattern IS NULL OR recurrence_pattern = ''
@@ -240,7 +226,6 @@ def _init_tasks_db_internal():
             UPDATE tasks SET recurrence_interval = 1
             WHERE recurrence_interval IS NULL OR recurrence_interval < 1
         """)
-
 
         timestamp = _now()
         conn.execute("""
@@ -252,29 +237,11 @@ def _init_tasks_db_internal():
             WHERE updated_at IS NULL OR updated_at = ''
         """)
 
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to
-            ON tasks(assigned_to)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tasks_created_by
-            ON tasks(created_by)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tasks_status
-            ON tasks(status)
-        """)
-
-
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tasks_due_date
-            ON tasks(due_date)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tasks_parent
-            ON tasks(parent_task_id)
-        """)
-
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)")
 
 
 def _error(message, status=400):
@@ -283,19 +250,13 @@ def _error(message, status=400):
 
 def _json_fields(allowed, require_nonempty=True):
     data = request.get_json(silent=True)
-
     if not isinstance(data, dict):
         return None, _error("Expected a JSON object")
-
     if require_nonempty and not data:
         return None, _error("Request body cannot be empty")
-
     unknown = set(data) - allowed
     if unknown:
-        return None, _error(
-            "Unsupported field(s): " + ", ".join(sorted(unknown))
-        )
-
+        return None, _error("Unsupported field(s): " + ", ".join(sorted(unknown)))
     return data, None
 
 
@@ -307,21 +268,11 @@ def _validate_edit(data, *, creating=False, existing=None):
 
     for key, value in data.items():
         if key == "title":
-            if (
-                not isinstance(value, str)
-                or not 1 <= len(value.strip()) <= 200
-            ):
+            if not isinstance(value, str) or not 1 <= len(value.strip()) <= 200:
                 return None, _error("title must be 1-200 characters")
             clean[key] = value.strip()
 
         elif key == "description":
-
-            if not isinstance(value, str) or len(value) > 5000:
-                return None, _error(
-                    "description must be a string of at most 5000 characters"
-                )
-            clean[key] = value
-
             if value is None:
                 clean[key] = ""
             elif not isinstance(value, str) or len(value) > 5000:
@@ -331,75 +282,39 @@ def _validate_edit(data, *, creating=False, existing=None):
             else:
                 clean[key] = value
 
-
         elif key == "category":
-            if (
-                not isinstance(value, str)
-                or not 1 <= len(value.strip()) <= 80
-            ):
+            if not isinstance(value, str) or not 1 <= len(value.strip()) <= 80:
                 return None, _error("category must be 1-80 characters")
             clean[key] = value.strip()
 
         elif key == "priority":
-            if (
-                not isinstance(value, str)
-                or value.strip().capitalize() not in VALID_PRIORITIES
-            ):
-                return None, _error(
-                    "priority must be Low, Medium, or High"
-                )
+            if not isinstance(value, str) or value.strip().capitalize() not in VALID_PRIORITIES:
+                return None, _error("priority must be Low, Medium, or High")
             clean[key] = value.strip().capitalize()
 
         elif key == "status":
             if not isinstance(value, str):
-                return None, _error(
-                    "status must be pending, in_progress, or completed"
-                )
-
+                return None, _error("status must be pending, in_progress, or completed")
             status = value.strip().lower().replace("-", "_").replace(" ", "_")
-
-
-            if status == "todo":
-
-            if status in ("todo", "not_started", "not started"):
-
+            if status in ("todo", "not_started"):
                 status = "pending"
-            if status == "done":
+            elif status == "done":
                 status = "completed"
-
             if status not in VALID_STATUSES:
-                return None, _error(
-                    "status must be pending, in_progress, or completed"
-                )
-
-
-            clean[key] = STATUS_STORAGE[status]
-
-
-
+                return None, _error("status must be pending, in_progress, or completed")
             clean[key] = status
-
 
         elif key == "due_date":
             if value is None or value == "":
                 clean[key] = None
-            elif (
-                isinstance(value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-            ):
-
-
+            elif isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
                 try:
                     date.fromisoformat(value)
                 except ValueError:
-                    return None, _error(
-                        "due_date must be a valid YYYY-MM-DD date"
-                    )
+                    return None, _error("due_date must be a valid YYYY-MM-DD date")
                 clean[key] = value
             else:
-                return None, _error(
-                    "due_date must be YYYY-MM-DD or null"
-                )
+                return None, _error("due_date must be YYYY-MM-DD or null")
 
         elif key in ("recurrence", "recurrence_pattern"):
             if not isinstance(value, str):
@@ -414,54 +329,33 @@ def _validate_edit(data, *, creating=False, existing=None):
             clean["recurrence_pattern"] = rec
 
         elif key == "recurrence_interval":
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value < 1
-            ):
-                return None, _error(
-                    "recurrence_interval must be a positive integer"
-                )
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                return None, _error("recurrence_interval must be a positive integer")
             clean[key] = value
 
         elif key == "recurrence_end_date":
             if value is None or value == "":
                 clean[key] = None
-            elif (
-                isinstance(value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-            ):
-
+            elif isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
                 try:
                     date.fromisoformat(value)
                 except ValueError:
                     return None, _error(
-
-                        "due_date must be a valid YYYY-MM-DD date"
-
                         "recurrence_end_date must be a valid YYYY-MM-DD date"
-
                     )
                 clean[key] = value
             else:
-                return None, _error(
-
-                    "due_date must be YYYY-MM-DD or null"
-                )
-
-
-                    "recurrence_end_date must be YYYY-MM-DD or null"
-                )
+                return None, _error("recurrence_end_date must be YYYY-MM-DD or null")
 
     effective_due = clean.get("due_date") if "due_date" in clean else (
         existing["due_date"] if existing and "due_date" in existing.keys() else None
     )
     effective_end = clean.get("recurrence_end_date") if "recurrence_end_date" in clean else (
-        existing["recurrence_end_date"] if existing and "recurrence_end_date" in existing.keys() else None
+        existing["recurrence_end_date"]
+        if existing and "recurrence_end_date" in existing.keys() else None
     )
     if effective_due and effective_end and effective_end < effective_due:
         return None, _error("recurrence_end_date cannot be earlier than due_date")
-
 
     return clean, None
 
@@ -481,15 +375,15 @@ def _calculate_next_due_date(base_date_str, pattern, interval=1):
 
     if pattern == "daily":
         return (base_date + timedelta(days=interval)).isoformat()
-    elif pattern == "weekly":
+    if pattern == "weekly":
         return (base_date + timedelta(weeks=interval)).isoformat()
-    elif pattern == "monthly":
+    if pattern == "monthly":
         m = base_date.month - 1 + interval
         y = base_date.year + m // 12
         m = m % 12 + 1
         d = min(base_date.day, calendar.monthrange(y, m)[1])
         return date(y, m, d).isoformat()
-    elif pattern == "yearly":
+    if pattern == "yearly":
         y = base_date.year + interval
         d = min(base_date.day, calendar.monthrange(y, base_date.month)[1])
         return date(y, base_date.month, d).isoformat()
@@ -513,27 +407,27 @@ def _handle_recurring_task_completion(conn, task):
     if end_date and next_due > end_date:
         return None
 
-    parent_id = (task["parent_task_id"] if "parent_task_id" in task_keys and task["parent_task_id"] else None) or task["id"]
+    parent_id = (
+        task["parent_task_id"]
+        if "parent_task_id" in task_keys and task["parent_task_id"] else None
+    ) or task["id"]
 
-    # Avoid spawning if an active occurrence for this series and date already exists
-    existing = conn.execute(
-        """
+    existing = conn.execute("""
         SELECT id FROM tasks
         WHERE (parent_task_id = ? OR id = ?)
           AND due_date = ?
           AND status NOT IN ('Completed', 'completed')
-        """,
-        (parent_id, parent_id, next_due),
-    ).fetchone()
+    """, (parent_id, parent_id, next_due)).fetchone()
     if existing:
         return existing["id"]
 
     now = _now()
     columns_in_table = _columns(conn)
     pending_status = _status_storage(conn, "pending")
-
     data = {
-        "title": task["title"] if "title" in task_keys and task["title"] else (task["name"] if "name" in task_keys else ""),
+        "title": task["title"] if "title" in task_keys and task["title"] else (
+            task["name"] if "name" in task_keys else ""
+        ),
         "description": task["description"] if "description" in task_keys else "",
         "status": pending_status,
         "priority": task["priority"] if "priority" in task_keys else "Medium",
@@ -548,7 +442,6 @@ def _handle_recurring_task_completion(conn, task):
         "created_at": now,
         "updated_at": now,
     }
-
     if "name" in columns_in_table:
         data["name"] = data["title"]
     if "is_completed" in columns_in_table:
@@ -559,7 +452,6 @@ def _handle_recurring_task_completion(conn, task):
     names = [k for k in data if k in columns_in_table]
     placeholders = ", ".join("?" for _ in names)
     cols = ", ".join(names)
-
     cursor = conn.execute(
         f"INSERT INTO tasks ({cols}) VALUES ({placeholders})",
         [data[name] for name in names],
@@ -571,118 +463,81 @@ def _actor(conn):
     if "user_id" not in session:
         return None
     return conn.execute(
-        "SELECT id, role FROM users WHERE id = ?",
-        (session["user_id"],),
+        "SELECT id, role FROM users WHERE id = ?", (session["user_id"],)
     ).fetchone()
 
 
 def _can_manage(actor):
-    return actor["role"] in MANAGEMENT_ROLES
+    return str(actor["role"]).upper() in MANAGEMENT_ROLES
 
 
 def _can_access(task, actor):
     role = str(actor["role"]).upper()
-
     if role in ("ADMIN", "MANAGER"):
         return True
-
     if role == "EMPLOYEE":
         task_keys = task.keys() if hasattr(task, "keys") else task
         assigned_to = task["assigned_to"] if "assigned_to" in task_keys else None
         created_by = task["created_by"] if "created_by" in task_keys else None
-        return (
-
-            task["assigned_to"] == actor["id"]
-            or (
-                task["assigned_to"] is None
-                and task["created_by"] == actor["id"]
-
-            assigned_to == actor["id"]
-            or (
-                assigned_to is None
-                and created_by == actor["id"]
-
-            )
+        return assigned_to == actor["id"] or (
+            assigned_to is None and created_by == actor["id"]
         )
-
     return False
 
 
 def _task(conn, task_id):
-    return conn.execute(
-        "SELECT * FROM tasks WHERE id = ?",
-        (task_id,),
-    ).fetchone()
+    return conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
 
 
 def _visible_task(conn, task_id, actor):
     task = _task(conn, task_id)
-
     if task is None:
         return None, _error("Task not found", 404)
-
     if not _can_access(task, actor):
         return None, _error("Access denied for this task", 403)
-
     return task, None
 
 
 def _public(task):
     fields = (
         "id", "title", "description", "status", "priority", "category",
-        "due_date", "created_by", "assigned_to",
-        "recurrence_pattern", "recurrence_interval", "recurrence_end_date",
-        "parent_task_id", "created_at", "updated_at"
+        "due_date", "created_by", "assigned_to", "recurrence_pattern",
+        "recurrence_interval", "recurrence_end_date", "parent_task_id",
+        "created_at", "updated_at"
     )
-
-    result = {field: task[field] for field in fields}
-    result["is_completed"] = (
-        str(result["status"]).strip().lower() == "completed"
-    )
-
-    result = {}
     task_keys = task.keys() if hasattr(task, "keys") else task
+    result = {}
     for field in fields:
         if field in task_keys:
             result[field] = task[field]
+        elif field == "recurrence_pattern":
+            result[field] = "none"
+        elif field == "recurrence_interval":
+            result[field] = 1
         else:
-            if field == "recurrence_pattern":
-                result[field] = "none"
-            elif field == "recurrence_interval":
-                result[field] = 1
-            else:
-                result[field] = None
+            result[field] = None
 
-    if (not result.get("title")) and "name" in task_keys and task["name"]:
+    if not result.get("title") and "name" in task_keys and task["name"]:
         result["title"] = task["name"]
 
     raw_status = str(result.get("status") or "Pending").strip()
     norm_status = STATUS_API.get(
-        raw_status,
-        raw_status.lower().replace("-", "_").replace(" ", "_")
+        raw_status, raw_status.lower().replace("-", "_").replace(" ", "_")
     )
     result["status"] = norm_status
     result["recurrence"] = result.get("recurrence_pattern", "none")
-    result["is_completed"] = (norm_status == "completed")
-
+    result["is_completed"] = norm_status == "completed"
     return result
 
 
 def _assignee_error(conn, assigned_to):
     if assigned_to is None:
         return None
-
     if type(assigned_to) is not int or assigned_to < 1:
         return _error("assigned_to must be an existing user ID or null")
-
-    user = conn.execute(
-        "SELECT id FROM users WHERE id = ?",
-        (assigned_to,),
-    ).fetchone()
-
+    user = conn.execute("SELECT id FROM users WHERE id = ?", (assigned_to,)).fetchone()
     if user is None:
         return _error("Assignee user not found", 404)
-
     return None
 
 
@@ -690,13 +545,7 @@ def _sync_legacy_completed(conn, task_id, status):
     if "is_completed" in _columns(conn):
         conn.execute(
             "UPDATE tasks SET is_completed = ? WHERE id = ?",
-            (
-                int(str(status).strip().lower() == "completed"),
-
-                int(STATUS_API.get(status, str(status).strip().lower()) == "completed"),
-
-                task_id,
-            ),
+            (int(STATUS_API.get(status, str(status).strip().lower()) == "completed"), task_id),
         )
 
 
@@ -707,10 +556,7 @@ def create_task():
     if error:
         return error
 
-    fields = {
-        key: value for key, value in data.items()
-        if key != "assigned_to"
-    }
+    fields = {key: value for key, value in data.items() if key != "assigned_to"}
     cleaned, error = _validate_edit(fields, creating=True)
     if error:
         return error
@@ -719,32 +565,22 @@ def create_task():
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
-        if actor["role"] not in {"ADMIN", "MANAGER", "EMPLOYEE"}:
+        role = str(actor["role"]).upper()
+        if role not in {"ADMIN", "MANAGER", "EMPLOYEE"}:
             return _error("Unsupported user role", 403)
-
         if "assigned_to" in data and not _can_manage(actor):
             return _error("Only a manager or admin can assign tasks", 403)
 
         assigned_to = data.get("assigned_to")
-
-        if actor["role"] == "EMPLOYEE" and "assigned_to" not in data:
+        if role == "EMPLOYEE" and "assigned_to" not in data:
             assigned_to = actor["id"]
-
         error = _assignee_error(conn, assigned_to)
         if error:
             return error
 
-        pending_status = _status_storage(conn, cleaned.get("status", "pending"))
-        cleaned["status"] = pending_status
         cleaned.setdefault("description", "")
-
-        cleaned.setdefault("status", "Pending")
-        cleaned.setdefault("priority", "Medium")
-        cleaned.setdefault("category", "Personal")
-        cleaned.setdefault("due_date", None)
-
-
+        cleaned.setdefault("status", "pending")
+        cleaned["status"] = _status_storage(conn, cleaned["status"])
         cleaned.setdefault("priority", "Medium")
         cleaned.setdefault("category", "Personal")
         cleaned.setdefault("due_date", None)
@@ -754,153 +590,77 @@ def create_task():
         cleaned.setdefault("parent_task_id", None)
 
         now = _now()
-
         cleaned.update({
             "created_by": actor["id"],
             "assigned_to": assigned_to,
             "created_at": now,
             "updated_at": now,
         })
-
         columns_in_table = _columns(conn)
-
-
         if "name" in columns_in_table:
             cleaned["name"] = cleaned["title"]
-
-
         if "user_id" in columns_in_table:
             cleaned["user_id"] = actor["id"]
-
         if "is_completed" in columns_in_table:
             cleaned["is_completed"] = int(
-
-                str(cleaned["status"]).strip().lower() == "completed"
-            )
-
-        names = list(cleaned)
-
                 STATUS_API.get(cleaned["status"], "") == "completed"
             )
 
         names = [k for k in cleaned if k in columns_in_table]
-
         placeholders = ", ".join("?" for _ in names)
         columns = ", ".join(names)
-
         cursor = conn.execute(
             f"INSERT INTO tasks ({columns}) VALUES ({placeholders})",
             [cleaned[name] for name in names],
         )
-
         return jsonify(_public(_task(conn, cursor.lastrowid))), 201
 
 
 @tasks_bp.route("/api/tasks", methods=["GET"])
 @login_required
 def list_tasks():
-
-    status = request.args.get("status")
-    priority = request.args.get("priority")
-    category = request.args.get("category")
-    search = request.args.get("search") or request.args.get("q")
-
-    filters = []
-    params = []
-
-    if status:
-        clean, error = _validate_edit({"status": status})
-        if error:
-            return error
-        filters.append("status = ?")
-        params.append(clean["status"])
-
-    if priority:
-        clean, error = _validate_edit({"priority": priority})
-        if error:
-            return error
-        filters.append("priority = ?")
-        params.append(clean["priority"])
-
-    if category:
-        filters.append("category = ?")
-        params.append(category)
-
-    if search:
-        filters.append("(title LIKE ? OR description LIKE ?)")
-        params.extend([f"%{search}%", f"%{search}%"])
-
-
     with _db() as conn:
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         role = str(actor["role"]).upper()
-
-
-        if role == "EMPLOYEE":
-            filters.append(
-                "(assigned_to = ? OR (assigned_to IS NULL AND created_by = ?))"
-            )
-            params.extend([actor["id"], actor["id"]])
-        elif role not in ("ADMIN", "MANAGER"):
-            return _error("Unsupported user role", 403)
-
-        sql = "SELECT * FROM tasks"
-        if filters:
-            sql += " WHERE " + " AND ".join(filters)
-
-        sql += " ORDER BY created_at DESC, id DESC"
-
-        rows = conn.execute(sql, params).fetchall()
-
         if role not in ("ADMIN", "MANAGER", "EMPLOYEE"):
             return _error("Unsupported user role", 403)
 
         filters = []
         params = []
 
-        # 1. Advanced Status filter (single or comma-separated or repeated param)
         status_raw = request.args.getlist("status")
         if status_raw:
             statuses_to_check = []
-            for s in status_raw:
-                for part in s.split(","):
-                    part_clean = part.strip()
-                    if part_clean:
-                        statuses_to_check.append(part_clean)
+            for item in status_raw:
+                statuses_to_check.extend(
+                    part.strip() for part in item.split(",") if part.strip()
+                )
             if statuses_to_check:
                 clean_statuses = []
-                for s in statuses_to_check:
-                    clean, error = _validate_edit({"status": s})
+                for item in statuses_to_check:
+                    clean, error = _validate_edit({"status": item})
                     if error:
                         return error
                     db_status = _status_storage(conn, clean["status"])
                     clean_statuses.append(db_status)
                     if clean["status"] == "pending":
-                        if "Not Started" not in clean_statuses:
-                            clean_statuses.append("Not Started")
-                        if "Pending" not in clean_statuses:
-                            clean_statuses.append("Pending")
+                        clean_statuses.extend(["Not Started", "Pending"])
                 clean_statuses = list(dict.fromkeys(clean_statuses))
                 placeholders = ", ".join("?" for _ in clean_statuses)
                 filters.append(f"status IN ({placeholders})")
                 params.extend(clean_statuses)
 
-        # 2. Advanced Priority filter (single or comma-separated or repeated param)
         priority_raw = request.args.getlist("priority")
         if priority_raw:
-            priorities_to_check = []
-            for p in priority_raw:
-                for part in p.split(","):
-                    part_clean = part.strip()
-                    if part_clean:
-                        priorities_to_check.append(part_clean)
-            if priorities_to_check:
+            priorities = []
+            for item in priority_raw:
+                priorities.extend(part.strip() for part in item.split(",") if part.strip())
+            if priorities:
                 clean_priorities = []
-                for p in priorities_to_check:
-                    clean, error = _validate_edit({"priority": p})
+                for item in priorities:
+                    clean, error = _validate_edit({"priority": item})
                     if error:
                         return error
                     clean_priorities.append(clean["priority"])
@@ -909,16 +669,14 @@ def list_tasks():
                 filters.append(f"priority IN ({placeholders})")
                 params.extend(clean_priorities)
 
-        # 3. Category filter
         category = request.args.get("category")
         if category:
-            cat_list = [c.strip() for c in category.split(",") if c.strip()]
-            if cat_list:
-                placeholders = ", ".join("?" for _ in cat_list)
+            categories = [item.strip() for item in category.split(",") if item.strip()]
+            if categories:
+                placeholders = ", ".join("?" for _ in categories)
                 filters.append(f"category IN ({placeholders})")
-                params.extend(cat_list)
+                params.extend(categories)
 
-        # 4. Search query
         search = request.args.get("search") or request.args.get("q")
         if search:
             columns_in_table = _columns(conn)
@@ -929,7 +687,6 @@ def list_tasks():
                 filters.append("(title LIKE ? OR description LIKE ?)")
                 params.extend([f"%{search}%", f"%{search}%"])
 
-        # 5. Advanced Date filters
         due_date = request.args.get("due_date")
         if due_date:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", due_date):
@@ -941,11 +698,7 @@ def list_tasks():
             filters.append("due_date = ?")
             params.append(due_date)
 
-        due_before = (
-            request.args.get("due_before")
-            or request.args.get("due_to")
-            or request.args.get("date_to")
-        )
+        due_before = request.args.get("due_before") or request.args.get("due_to") or request.args.get("date_to")
         if due_before:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", due_before):
                 return _error("due_before must be a valid YYYY-MM-DD date")
@@ -956,11 +709,7 @@ def list_tasks():
             filters.append("due_date IS NOT NULL AND due_date <= ?")
             params.append(due_before)
 
-        due_after = (
-            request.args.get("due_after")
-            or request.args.get("due_from")
-            or request.args.get("date_from")
-        )
+        due_after = request.args.get("due_after") or request.args.get("due_from") or request.args.get("date_from")
         if due_after:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", due_after):
                 return _error("due_after must be a valid YYYY-MM-DD date")
@@ -971,10 +720,7 @@ def list_tasks():
             filters.append("due_date IS NOT NULL AND due_date >= ?")
             params.append(due_after)
 
-        created_before = (
-            request.args.get("created_before")
-            or request.args.get("created_to")
-        )
+        created_before = request.args.get("created_before") or request.args.get("created_to")
         if created_before:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", created_before):
                 return _error("created_before must be a valid YYYY-MM-DD date")
@@ -985,10 +731,7 @@ def list_tasks():
             filters.append("substr(created_at, 1, 10) <= ?")
             params.append(created_before)
 
-        created_after = (
-            request.args.get("created_after")
-            or request.args.get("created_from")
-        )
+        created_after = request.args.get("created_after") or request.args.get("created_from")
         if created_after:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", created_after):
                 return _error("created_after must be a valid YYYY-MM-DD date")
@@ -1001,27 +744,19 @@ def list_tasks():
 
         overdue = request.args.get("overdue")
         if overdue and overdue.lower() in ("true", "1", "yes"):
-            today_str = date.today().isoformat()
             filters.append(
                 "due_date IS NOT NULL AND due_date < ? AND status NOT IN ('Completed', 'completed')"
             )
-            params.append(today_str)
+            params.append(date.today().isoformat())
 
-        # 6. Recurrence filter
-        recurrence = (
-            request.args.get("recurrence")
-            or request.args.get("recurrence_pattern")
-        )
+        recurrence = request.args.get("recurrence") or request.args.get("recurrence_pattern")
         if recurrence:
             rec_clean = recurrence.strip().lower()
             if rec_clean not in VALID_RECURRENCES:
-                return _error(
-                    "recurrence must be one of: none, daily, weekly, monthly, yearly"
-                )
+                return _error("recurrence must be one of: none, daily, weekly, monthly, yearly")
             filters.append("recurrence_pattern = ?")
             params.append(rec_clean)
 
-        # 7. Assigned to filter
         assigned_to_param = request.args.get("assigned_to")
         if assigned_to_param:
             if assigned_to_param.lower() in ("null", "unassigned", "none"):
@@ -1034,43 +769,24 @@ def list_tasks():
                 except ValueError:
                     return _error("assigned_to must be an integer or 'unassigned'")
 
-        # 8. Sort order
-        sort_by = (
-            request.args.get("sort_by")
-            or request.args.get("order_by")
-            or "created_at"
-        )
+        sort_by = request.args.get("sort_by") or request.args.get("order_by") or "created_at"
         allowed_sort_fields = {
-            "id": "id",
-            "title": "title",
-            "status": "status",
-            "priority": "priority",
-            "due_date": "due_date",
-            "created_at": "created_at",
-            "updated_at": "updated_at",
+            "id": "id", "title": "title", "status": "status",
+            "priority": "priority", "due_date": "due_date",
+            "created_at": "created_at", "updated_at": "updated_at",
         }
         if sort_by not in allowed_sort_fields:
-            return _error(
-                f"sort_by must be one of: {', '.join(sorted(allowed_sort_fields))}"
-            )
+            return _error(f"sort_by must be one of: {', '.join(sorted(allowed_sort_fields))}")
 
-        order = (
-            request.args.get("order")
-            or request.args.get("sort_order")
-            or "desc"
-        ).lower()
+        order = (request.args.get("order") or request.args.get("sort_order") or "desc").lower()
         if order not in ("asc", "desc"):
             return _error("order must be asc or desc")
-
         order_clause = f"{allowed_sort_fields[sort_by]} {order.upper()}, id DESC"
 
-        # 9. Pagination parameters
         page_param = request.args.get("page")
         limit_param = request.args.get("limit") or request.args.get("per_page")
         is_paginated = page_param is not None or limit_param is not None
-
-        page = 1
-        limit = 10
+        page, limit = 1, 10
 
         if page_param is not None:
             try:
@@ -1089,27 +805,21 @@ def list_tasks():
                 return _error("limit must be an integer between 1 and 100")
 
         if role == "EMPLOYEE":
-            filters.append(
-                "(assigned_to = ? OR (assigned_to IS NULL AND created_by = ?))"
-            )
+            filters.append("(assigned_to = ? OR (assigned_to IS NULL AND created_by = ?))")
             params.extend([actor["id"], actor["id"]])
 
-        where_clause = ""
-        if filters:
-            where_clause = " WHERE " + " AND ".join(filters)
+        where_clause = " WHERE " + " AND ".join(filters) if filters else ""
 
         if is_paginated:
-            count_sql = f"SELECT COUNT(*) FROM tasks{where_clause}"
-            total = conn.execute(count_sql, params).fetchone()[0]
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM tasks{where_clause}", params
+            ).fetchone()[0]
             total_pages = math.ceil(total / limit) if total > 0 else 0
             offset = (page - 1) * limit
-
-            data_sql = (
-                f"SELECT * FROM tasks{where_clause} "
-                f"ORDER BY {order_clause} LIMIT ? OFFSET ?"
-            )
-            rows = conn.execute(data_sql, [*params, limit, offset]).fetchall()
-
+            rows = conn.execute(
+                f"SELECT * FROM tasks{where_clause} ORDER BY {order_clause} LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
             resp = jsonify({
                 "tasks": [_public(row) for row in rows],
                 "total": total,
@@ -1119,11 +829,8 @@ def list_tasks():
                 "has_next": page < total_pages,
                 "has_prev": page > 1,
                 "pagination": {
-                    "total": total,
-                    "page": page,
-                    "limit": limit,
-                    "total_pages": total_pages,
-                    "has_next": page < total_pages,
+                    "total": total, "page": page, "limit": limit,
+                    "total_pages": total_pages, "has_next": page < total_pages,
                     "has_prev": page > 1,
                 },
             })
@@ -1133,10 +840,9 @@ def list_tasks():
             resp.headers["X-Total-Pages"] = str(total_pages)
             return resp
 
-        # Non-paginated default (preserves backward compatibility)
-        data_sql = f"SELECT * FROM tasks{where_clause} ORDER BY {order_clause}"
-        rows = conn.execute(data_sql, params).fetchall()
-
+        rows = conn.execute(
+            f"SELECT * FROM tasks{where_clause} ORDER BY {order_clause}", params
+        ).fetchall()
         return jsonify([_public(row) for row in rows])
 
 
@@ -1147,11 +853,9 @@ def get_task(task_id):
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         task, error = _visible_task(conn, task_id, actor)
         if error:
             return error
-
         return jsonify(_public(task))
 
 
@@ -1162,31 +866,10 @@ def update_task(task_id):
     if error:
         return error
 
-
-    cleaned, error = _validate_edit(data)
-    if error:
-        return error
-
-
     with _db() as conn:
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
-
-        _, error = _visible_task(conn, task_id, actor)
-        if error:
-            return error
-
-        cleaned["updated_at"] = _now()
-        assignments = ", ".join(
-            f"{key} = ?" for key in cleaned
-        )
-
-        conn.execute(
-            f"UPDATE tasks SET {assignments} WHERE id = ?",
-            [*cleaned.values(), task_id],
-
         task, error = _visible_task(conn, task_id, actor)
         if error:
             return error
@@ -1194,33 +877,25 @@ def update_task(task_id):
         cleaned, error = _validate_edit(data, existing=task)
         if error:
             return error
-
         if "status" in cleaned:
             cleaned["status"] = _status_storage(conn, cleaned["status"])
 
         cleaned["updated_at"] = _now()
         columns_in_table = _columns(conn)
-
         if "title" in cleaned and "name" in columns_in_table:
             cleaned["name"] = cleaned["title"]
 
-        assignments = ", ".join(
-            f"{key} = ?" for key in cleaned if key in columns_in_table
-        )
-        values = [cleaned[k] for k in cleaned if k in columns_in_table]
-
+        assignments = ", ".join(f"{key} = ?" for key in cleaned if key in columns_in_table)
+        values = [cleaned[key] for key in cleaned if key in columns_in_table]
         conn.execute(
             f"UPDATE tasks SET {assignments} WHERE id = ?",
             [*values, task_id],
-
         )
 
         if "status" in cleaned:
             _sync_legacy_completed(conn, task_id, cleaned["status"])
-
             if STATUS_API.get(cleaned["status"], "") == "completed":
                 _handle_recurring_task_completion(conn, _task(conn, task_id))
-
 
         return jsonify(_public(_task(conn, task_id)))
 
@@ -1232,15 +907,10 @@ def delete_task(task_id):
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         _, error = _visible_task(conn, task_id, actor)
         if error:
             return error
-
-        conn.execute(
-            "DELETE FROM tasks WHERE id = ?",
-            (task_id,),
-        )
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         return jsonify({"message": "Task deleted successfully"})
 
 
@@ -1250,10 +920,8 @@ def update_task_status(task_id):
     data, error = _json_fields({"status"})
     if error:
         return error
-
     if "status" not in data:
         return _error("status is required")
-
     cleaned, error = _validate_edit(data)
     if error:
         return error
@@ -1262,41 +930,18 @@ def update_task_status(task_id):
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
-
-        _, error = _visible_task(conn, task_id, actor)
-        if error:
-            return error
-
-
         task, error = _visible_task(conn, task_id, actor)
         if error:
             return error
 
         db_status = _status_storage(conn, cleaned["status"])
-
-
         conn.execute(
-            """
-            UPDATE tasks
-            SET status = ?, updated_at = ?
-            WHERE id = ?
-            """,
-
-            (cleaned["status"], _now(), task_id),
-        )
-
-        _sync_legacy_completed(conn, task_id, cleaned["status"])
-
+            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
             (db_status, _now(), task_id),
         )
-
         _sync_legacy_completed(conn, task_id, db_status)
-
         if STATUS_API.get(db_status, "") == "completed":
-            _handle_recurring_task_completion(conn, task)
-
-
+            _handle_recurring_task_completion(conn, _task(conn, task_id))
         return jsonify(_public(_task(conn, task_id)))
 
 
@@ -1306,7 +951,6 @@ def assign_task(task_id):
     data, error = _json_fields({"assigned_to"})
     if error:
         return error
-
     if "assigned_to" not in data:
         return _error("assigned_to is required (user ID or null)")
 
@@ -1314,29 +958,19 @@ def assign_task(task_id):
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         if not _can_manage(actor):
             return _error("Only a manager or admin can assign tasks", 403)
-
         _, error = _visible_task(conn, task_id, actor)
         if error:
             return error
-
         error = _assignee_error(conn, data["assigned_to"])
         if error:
             return error
-
         conn.execute(
-            """
-            UPDATE tasks
-            SET assigned_to = ?, updated_at = ?
-            WHERE id = ?
-            """,
+            "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
             (data["assigned_to"], _now(), task_id),
         )
-
         return jsonify(_public(_task(conn, task_id)))
-
 
 
 @tasks_bp.route("/api/tasks/bulk", methods=["PATCH", "POST"])
@@ -1350,13 +984,10 @@ def bulk_update_tasks():
     task_ids = data.get("task_ids")
     if task_ids is None:
         task_ids = data.get("ids")
-
     if task_ids is None or not isinstance(task_ids, list):
         return _error("task_ids must be a non-empty list of task IDs")
-
-    if len(task_ids) == 0:
+    if not task_ids:
         return _error("task_ids cannot be empty")
-
     if len(task_ids) > 100:
         return _error("Cannot bulk update more than 100 tasks at once")
 
@@ -1368,19 +999,13 @@ def bulk_update_tasks():
 
     raw_updates = data.get("updates")
     if raw_updates is None:
-        raw_updates = {
-            k: v for k, v in data.items()
-            if k not in ("task_ids", "ids")
-        }
-
+        raw_updates = {k: v for k, v in data.items() if k not in ("task_ids", "ids")}
     if not isinstance(raw_updates, dict) or not raw_updates:
         return _error("No update fields provided")
 
     forbidden = set(raw_updates) & {"id", "created_by", "created_at", "updated_at"}
     if forbidden:
-        return _error(
-            f"Cannot bulk update field(s): {', '.join(sorted(forbidden))}"
-        )
+        return _error(f"Cannot bulk update field(s): {', '.join(sorted(forbidden))}")
 
     allowed_update_keys = EDITABLE_FIELDS | {"assigned_to"}
     unknown = set(raw_updates) - allowed_update_keys
@@ -1396,7 +1021,6 @@ def bulk_update_tasks():
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         if "assigned_to" in raw_updates:
             if not _can_manage(actor):
                 return _error("Only a manager or admin can assign tasks", 403)
@@ -1405,7 +1029,6 @@ def bulk_update_tasks():
             if assign_err:
                 return assign_err
             cleaned["assigned_to"] = assigned_to
-
         if not cleaned:
             return _error("No valid fields to update")
 
@@ -1420,18 +1043,13 @@ def bulk_update_tasks():
 
         if "status" in cleaned:
             cleaned["status"] = _status_storage(conn, cleaned["status"])
-
         cleaned["updated_at"] = _now()
         columns_in_table = _columns(conn)
-
         if "title" in cleaned and "name" in columns_in_table:
             cleaned["name"] = cleaned["title"]
 
-        assignments = ", ".join(
-            f"{k} = ?" for k in cleaned if k in columns_in_table
-        )
+        assignments = ", ".join(f"{k} = ?" for k in cleaned if k in columns_in_table)
         values = [cleaned[k] for k in cleaned if k in columns_in_table]
-
         updated_tasks = []
         for task in tasks:
             tid = task["id"]
@@ -1442,14 +1060,13 @@ def bulk_update_tasks():
             if "status" in cleaned:
                 _sync_legacy_completed(conn, tid, cleaned["status"])
                 if STATUS_API.get(cleaned["status"], "") == "completed":
-                    _handle_recurring_task_completion(conn, task)
-
+                    _handle_recurring_task_completion(conn, _task(conn, tid))
             updated_tasks.append(_task(conn, tid))
 
         return jsonify({
             "message": f"Successfully updated {len(updated_tasks)} tasks",
             "updated_count": len(updated_tasks),
-            "updated_tasks": [_public(t) for t in updated_tasks],
+            "updated_tasks": [_public(task) for task in updated_tasks],
         })
 
 
@@ -1460,7 +1077,6 @@ def duplicate_task(task_id):
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return _error("Expected a JSON object")
-
     allowed_overrides = EDITABLE_FIELDS | {"assigned_to"}
     unknown = set(data) - allowed_overrides
     if unknown:
@@ -1475,16 +1091,10 @@ def duplicate_task(task_id):
         actor = _actor(conn)
         if actor is None:
             return _error("User not found", 401)
-
         original_task, error = _visible_task(conn, task_id, actor)
         if error:
             return error
-
-        task_keys = (
-            original_task.keys()
-            if hasattr(original_task, "keys")
-            else original_task
-        )
+        task_keys = original_task.keys() if hasattr(original_task, "keys") else original_task
 
         if "assigned_to" in data:
             if not _can_manage(actor):
@@ -1493,66 +1103,51 @@ def duplicate_task(task_id):
             assign_err = _assignee_error(conn, assigned_to)
             if assign_err:
                 return assign_err
+        elif str(actor["role"]).upper() == "EMPLOYEE":
+            assigned_to = actor["id"]
         else:
-            if actor["role"] == "EMPLOYEE":
-                assigned_to = actor["id"]
-            else:
-                assigned_to = (
-                    original_task["assigned_to"]
-                    if "assigned_to" in task_keys
-                    else None
-                )
+            assigned_to = original_task["assigned_to"] if "assigned_to" in task_keys else None
 
         orig_title = (
             original_task["title"]
             if "title" in task_keys and original_task["title"]
             else (original_task["name"] if "name" in task_keys else "Task")
         )
-
-        new_title = (
-            cleaned_overrides.get("title")
-            or f"Copy of {orig_title}"
-        )
+        new_title = cleaned_overrides.get("title") or f"Copy of {orig_title}"
         if len(new_title) > 200:
             new_title = new_title[:200]
 
         new_desc = cleaned_overrides.get(
-            "description",
-            original_task["description"] if "description" in task_keys else ""
+            "description", original_task["description"] if "description" in task_keys else ""
         )
         new_priority = cleaned_overrides.get(
-            "priority",
-            original_task["priority"] if "priority" in task_keys else "Medium"
+            "priority", original_task["priority"] if "priority" in task_keys else "Medium"
         )
         new_category = cleaned_overrides.get(
-            "category",
-            original_task["category"] if "category" in task_keys else "Personal"
+            "category", original_task["category"] if "category" in task_keys else "Personal"
         )
         new_due_date = cleaned_overrides.get(
-            "due_date",
-            original_task["due_date"] if "due_date" in task_keys else None
+            "due_date", original_task["due_date"] if "due_date" in task_keys else None
         )
         new_rec_pattern = cleaned_overrides.get(
             "recurrence_pattern",
-            original_task["recurrence_pattern"] if "recurrence_pattern" in task_keys else "none"
+            original_task["recurrence_pattern"] if "recurrence_pattern" in task_keys else "none",
         )
         new_rec_interval = cleaned_overrides.get(
             "recurrence_interval",
-            original_task["recurrence_interval"] if "recurrence_interval" in task_keys else 1
+            original_task["recurrence_interval"] if "recurrence_interval" in task_keys else 1,
         )
         new_rec_end_date = cleaned_overrides.get(
             "recurrence_end_date",
-            original_task["recurrence_end_date"] if "recurrence_end_date" in task_keys else None
+            original_task["recurrence_end_date"] if "recurrence_end_date" in task_keys else None,
         )
 
         now = _now()
         columns_in_table = _columns(conn)
-        pending_status = _status_storage(conn, "pending")
-
         insert_data = {
             "title": new_title,
             "description": new_desc,
-            "status": pending_status,
+            "status": _status_storage(conn, "pending"),
             "priority": new_priority,
             "category": new_category,
             "due_date": new_due_date,
@@ -1565,33 +1160,26 @@ def duplicate_task(task_id):
             "created_at": now,
             "updated_at": now,
         }
-
         if "name" in columns_in_table:
             insert_data["name"] = new_title
-
         if "user_id" in columns_in_table:
             insert_data["user_id"] = actor["id"]
-
         if "is_completed" in columns_in_table:
             insert_data["is_completed"] = 0
 
         names = [k for k in insert_data if k in columns_in_table]
         placeholders = ", ".join("?" for _ in names)
         columns = ", ".join(names)
-
         cursor = conn.execute(
             f"INSERT INTO tasks ({columns}) VALUES ({placeholders})",
             [insert_data[name] for name in names],
         )
-
-        new_task = _task(conn, cursor.lastrowid)
-        return jsonify(_public(new_task)), 201
+        return jsonify(_public(_task(conn, cursor.lastrowid))), 201
 
 
 def create_tasks_app(test_config=None):
     """Application factory for Task Management API and its test suite."""
     from flask import Flask
-    import secrets
     from management import init_management_db
 
     app = Flask(__name__)
@@ -1610,6 +1198,4 @@ def create_tasks_app(test_config=None):
 
     app.register_blueprint(auth.auth_bp)
     app.register_blueprint(tasks_bp)
-
     return app
-
