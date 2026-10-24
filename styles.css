@@ -2070,11 +2070,6 @@ a {
 
 .kanban-card-top {
 
-/* ==========================================================================
-   Member 4: Employee, Team and Project Management UI Styles
-   ========================================================================== */
-
-/* View switcher (All Employees / By Department & Team Cards / Table) */
 .view-switch-row {
   display: flex;
   align-items: center;
@@ -2811,7 +2806,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 5px;
-
+}
 .presets-label {
   font-size: 11px;
   color: var(--muted);
@@ -3255,7 +3250,7 @@ a {
   margin-top: 18px;
   text-align: right;
 
-
+}
 /* Member 3: Task Discussion, Comments, Audit Logs, and Activity History */
 .task-tabs {
   display: flex;
@@ -3532,8 +3527,7 @@ a {
     grid-template-columns: 1fr;
   }
 
-  background: var(--brand);
-  border: 2px solid var(--surface);
+  
 }
 
 .timeline-content {
@@ -3577,6 +3571,7 @@ a {
 .badge-assignment {
   background: var(--green-soft);
   color: var(--green);
- main
+ 
 
+}
 }

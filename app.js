@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
@@ -751,6 +751,8 @@ function taskWorkspaceMarkup(details) {
         </div>
       `}
     </section>
+  `;
+}
 
 function projectDetailPageMarkup(projectId) {
   const project = projectById(projectId);
@@ -1811,7 +1813,6 @@ function detailModalContent(entity, record) {
       </div>
     `;
   }
- main
 
   return "";
 }
@@ -2434,7 +2435,7 @@ async function saveAssignedTaskStatus(taskId) {
   }
 }
 
- feature/member4-management-ui
+ 
 async function saveProjectProgress(projectId, progressValue) {
   const parsed = Number(progressValue);
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
@@ -2468,7 +2469,8 @@ async function saveTeamAssignments(teamId) {
     showToast(`Team members updated (${memberIds.length} members assigned).`, "success");
   } catch (error) {
     showToast(error.message || "Could not update team members.", "error");
-
+  }
+}
 async function handlePasswordSubmit(form) {
   const formData = new FormData(form);
   const currentPassword = String(formData.get("currentPassword") || "");
@@ -2515,7 +2517,6 @@ async function handlePasswordSubmit(form) {
     }
     submitButton.disabled = false;
     submitButton.textContent = "Update password";
-main
   }
 }
 
@@ -2978,7 +2979,6 @@ app.addEventListener("click", (event) => {
     render();
   } else if (action === "save-team-assignment") {
     saveTeamAssignments(actionButtonElement.dataset.id);
- main
   } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "edit-task", "complete-task", "delete-task"].includes(action)) {
 
   } else if (["view-employee", "edit-employee", "toggle-employee", "view-team", "edit-team", "delete-team", "view-project", "edit-project", "delete-project", "view-task", "edit-task", "complete-task", "delete-task"].includes(action)) {
@@ -3062,7 +3062,6 @@ app.addEventListener("change", (event) => {
       render();
       showToast("Project status updated.", "success");
     }).catch((err) => showToast(err.message, "error"));
- main
   }
 });
 
@@ -3072,5 +3071,6 @@ document.addEventListener("keydown", (event) => {
     render();
   }
 });
-
+  
 restoreSession();
+  
