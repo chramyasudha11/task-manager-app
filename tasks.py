@@ -362,54 +362,100 @@ def _validate_edit(data, *, creating=False, existing=None):
 
 def _calculate_next_due_date(base_date_str, pattern, interval=1):
     """Compute the next due date based on recurrence pattern and interval."""
+
     if not base_date_str:
         base_date = date.today()
     else:
         try:
             base_date = date.fromisoformat(base_date_str)
-        except ValueError:
+        except (ValueError, TypeError):
             base_date = date.today()
 
-    interval = max(1, interval or 1)
+    try:
+        if isinstance(interval, bool):
+            return None
+        interval = int(interval or 1)
+    except (ValueError, TypeError):
+        return None
+
+    interval = max(1, interval)
     pattern = (pattern or "none").strip().lower()
 
     if pattern == "daily":
         return (base_date + timedelta(days=interval)).isoformat()
+
     if pattern == "weekly":
         return (base_date + timedelta(weeks=interval)).isoformat()
+
     if pattern == "monthly":
         m = base_date.month - 1 + interval
         y = base_date.year + m // 12
         m = m % 12 + 1
         d = min(base_date.day, calendar.monthrange(y, m)[1])
         return date(y, m, d).isoformat()
+
     if pattern == "yearly":
         y = base_date.year + interval
         d = min(base_date.day, calendar.monthrange(y, base_date.month)[1])
         return date(y, base_date.month, d).isoformat()
+
     return None
 
-
 def _handle_recurring_task_completion(conn, task):
-    """If a task has an active recurrence pattern and completed, create its next occurrence."""
+    """Create the next occurrence when a recurring task is completed."""
+
     task_keys = task.keys() if hasattr(task, "keys") else task
-    pattern = task["recurrence_pattern"] if "recurrence_pattern" in task_keys else "none"
+
+    pattern = (
+        task["recurrence_pattern"]
+        if "recurrence_pattern" in task_keys
+        else "none"
+    )
+
     if not pattern or pattern == "none":
         return None
 
-    interval = task["recurrence_interval"] if "recurrence_interval" in task_keys else 1
-    base_due = task["due_date"] if "due_date" in task_keys and task["due_date"] else date.today().isoformat()
-    next_due = _calculate_next_due_date(base_due, pattern, interval)
+    interval = (
+        task["recurrence_interval"]
+        if "recurrence_interval" in task_keys
+        else 1
+    )
+
+    try:
+        if isinstance(interval, bool):
+            return None
+        interval = int(interval or 1)
+    except (ValueError, TypeError):
+        return None
+
+    interval = max(1, interval)
+
+    base_due = (
+        task["due_date"]
+        if "due_date" in task_keys and task["due_date"]
+        else date.today().isoformat()
+    )
+
+    next_due = _calculate_next_due_date(
+        base_due, pattern, interval
+    )
+
     if not next_due:
         return None
 
-    end_date = task["recurrence_end_date"] if "recurrence_end_date" in task_keys else None
+    end_date = (
+        task["recurrence_end_date"]
+        if "recurrence_end_date" in task_keys
+        else None
+    )
+
     if end_date and next_due > end_date:
         return None
 
     parent_id = (
         task["parent_task_id"]
-        if "parent_task_id" in task_keys and task["parent_task_id"] else None
+        if "parent_task_id" in task_keys and task["parent_task_id"]
+        else None
     ) or task["id"]
 
     existing = conn.execute("""
@@ -418,12 +464,14 @@ def _handle_recurring_task_completion(conn, task):
           AND due_date = ?
           AND status NOT IN ('Completed', 'completed')
     """, (parent_id, parent_id, next_due)).fetchone()
+
     if existing:
         return existing["id"]
 
     now = _now()
     columns_in_table = _columns(conn)
     pending_status = _status_storage(conn, "pending")
+
     data = {
         "title": task["title"] if "title" in task_keys and task["title"] else (
             task["name"] if "name" in task_keys else ""
@@ -442,23 +490,26 @@ def _handle_recurring_task_completion(conn, task):
         "created_at": now,
         "updated_at": now,
     }
+
     if "name" in columns_in_table:
         data["name"] = data["title"]
+
     if "is_completed" in columns_in_table:
         data["is_completed"] = 0
+
     if "user_id" in columns_in_table:
         data["user_id"] = data["created_by"]
 
-    names = [k for k in data if k in columns_in_table]
+    names = [key for key in data if key in columns_in_table]
     placeholders = ", ".join("?" for _ in names)
     cols = ", ".join(names)
+
     cursor = conn.execute(
         f"INSERT INTO tasks ({cols}) VALUES ({placeholders})",
         [data[name] for name in names],
     )
+
     return cursor.lastrowid
-
-
 def _actor(conn):
     if "user_id" not in session:
         return None
@@ -486,7 +537,21 @@ def _can_access(task, actor):
 
 
 def _task(conn, task_id):
-    return conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    task = conn.execute(
+        "SELECT * FROM tasks WHERE id = ?", (task_id,)
+    ).fetchone()
+
+    if task is None:
+        return None
+
+    task_data = dict(task)
+
+    if task_data.get("recurrence_interval") is not None:
+        task_data["recurrence_interval"] = int(
+            task_data["recurrence_interval"]
+        )
+
+    return task_data
 
 
 def _visible_task(conn, task_id, actor):
