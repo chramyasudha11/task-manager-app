@@ -63,15 +63,33 @@ def can_access_task(conn, task, user):
     return False
 
 
-def record_activity(conn, task_id, user_id, action, details=""):
+def record_activity(conn, task_id, user_id, action, details="", actor_name=None):
     """Record a general activity entry for a task."""
-    conn.execute(
-        """
-        INSERT INTO task_activities (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (task_id, user_id, action, details or "", _utc_now()),
-    )
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(task_activities)").fetchall()}
+    if "actor_name" in cols:
+        if not actor_name:
+            if user_id:
+                row = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
+                actor_name = row["name"] if row and "name" in row.keys() else "System"
+            elif hasattr(g, "current_user") and g.current_user and g.current_user.get("name"):
+                actor_name = g.current_user["name"]
+            else:
+                actor_name = "System"
+        conn.execute(
+            """
+            INSERT INTO task_activities (task_id, user_id, actor_name, action, details, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (task_id, user_id, actor_name or "System", action, details or "", _utc_now()),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO task_activities (task_id, user_id, action, details, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (task_id, user_id, action, details or "", _utc_now()),
+        )
 
 
 def record_audit_log(conn, task_id, user_id, change_type, old_value, new_value, details=""):
