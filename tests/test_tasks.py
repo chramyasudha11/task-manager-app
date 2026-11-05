@@ -471,6 +471,21 @@ class TaskApiTests(unittest.TestCase):
             400
         )
         self.assertEqual(self.manager.post("/api/tasks", json={}).status_code, 400)
+    def test_due_date_format_validation(self):
+        invalid_dates = [
+            "not-a-date",
+            "2026/11/05",
+            "05-11-2026",
+        ]
+
+        for invalid_date in invalid_dates:
+            with self.subTest(due_date=invalid_date):
+                response = self.new_task(due_date=invalid_date)
+                self.assertEqual(
+                    response.status_code,
+                    400,
+                    f"Expected invalid date {invalid_date} to be rejected"
+                )
 
 
 if __name__ == "__main__":
