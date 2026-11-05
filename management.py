@@ -100,6 +100,9 @@ def init_management_db(app):
             CREATE INDEX IF NOT EXISTS idx_task_activities_task ON task_activities(task_id);
             """
         )
+        comment_cols = {row[1] for row in database.execute("PRAGMA table_info(task_comments)").fetchall()}
+        if "updated_at" not in comment_cols:
+            database.execute("ALTER TABLE task_comments ADD COLUMN updated_at TEXT")
         task_cols = {row[1] for row in database.execute("PRAGMA table_info(tasks)").fetchall()}
         if "description" not in task_cols:
             database.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
@@ -1215,9 +1218,12 @@ def list_task_comments(record_id):
             "taskId": row["task_id"],
             "userId": row["user_id"],
             "authorName": row["author_name"],
+            "userName": row["author_name"],
             "authorRole": row["author_role"],
+            "userRole": row["author_role"],
             "content": row["content"],
             "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"] if "updated_at" in row.keys() else None,
         }
         for row in rows
     ]
@@ -1230,7 +1236,11 @@ def create_task_comment(record_id):
     data, error = _required_record(_json_object())
     if error:
         return error
-    content = _text(data, "content", "Comment", required=True, limit=2000)
+    try:
+        content = _text(data, "content", "Comment", required=True, limit=2000)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+
     database = get_db()
     task = database.execute("SELECT * FROM tasks WHERE id = ?", (record_id,)).fetchone()
     if task is None:
@@ -1264,9 +1274,12 @@ def create_task_comment(record_id):
         "taskId": comment["task_id"],
         "userId": comment["user_id"],
         "authorName": comment["author_name"],
+        "userName": comment["author_name"],
         "authorRole": comment["author_role"],
+        "userRole": comment["author_role"],
         "content": comment["content"],
         "createdAt": comment["created_at"],
+        "updatedAt": None,
     }), 201
 
 
